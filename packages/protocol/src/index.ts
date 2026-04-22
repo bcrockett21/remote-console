@@ -7,6 +7,9 @@ export type TransportEnvelope<TType extends string, TPayload> = {
 
 export type SessionState = "connecting" | "connected" | "disconnected";
 
+export type RelayAuthMode = "shared-key" | "entra-id";
+export type RelayAuthorizationMode = "development-shared-key" | "entra-viewer-allowlist";
+
 export type SessionDescriptor = {
   id: string;
   machineName: string;
@@ -62,11 +65,32 @@ export type AgentOutputPayload = {
   }>;
 };
 
+export type RelayConfigPayload = {
+  viewerAuth: {
+    mode: RelayAuthMode;
+    status: "ready" | "planned";
+    viewerKeyHeaderName: string | null;
+    teamsSsoEnabled: boolean;
+  };
+  agentAuth: {
+    mode: "shared-key";
+    status: "ready";
+    agentKeyHeaderName: string;
+  };
+  authorization: {
+    mode: RelayAuthorizationMode;
+    allowedViewerCount: number;
+    requiresUserMapping: boolean;
+    machineBindingEnabled: boolean;
+  };
+};
+
 export type TerminalInputEvent = TransportEnvelope<"terminal.input", TerminalInputPayload>;
 export type TerminalOutputEvent = TransportEnvelope<"terminal.output", TerminalOutputPayload>;
 export type SessionSnapshotEvent = TransportEnvelope<"session.snapshot", SessionSnapshotPayload>;
 export type TerminalSnapshotEvent = TransportEnvelope<"terminal.snapshot", TerminalSnapshotPayload>;
 export type AgentCommandSnapshotEvent = TransportEnvelope<"agent.commands", AgentCommandSnapshotPayload>;
+export type RelayConfigEvent = TransportEnvelope<"relay.config", RelayConfigPayload>;
 
 export function createEnvelope<TType extends string, TPayload>(
   type: TType,
@@ -118,4 +142,8 @@ export function createAgentCommand(
     command,
     createdAt: now.toISOString()
   };
+}
+
+export function isRelayAuthMode(value: unknown): value is RelayAuthMode {
+  return value === "shared-key" || value === "entra-id";
 }

@@ -7,10 +7,10 @@ import {
   type SessionDescriptor,
   type TerminalLine
 } from "@remote-console/protocol";
+import { authorizeAgent, authorizeViewer, loadRelayRuntimeConfig } from "./auth.js";
 
 const port = Number.parseInt(process.env.PORT ?? "4040", 10);
-const viewerSharedKey = process.env.VIEWER_SHARED_KEY ?? "viewer-dev-key";
-const agentSharedKey = process.env.AGENT_SHARED_KEY ?? "agent-dev-key";
+const relayConfig = loadRelayRuntimeConfig(process.env);
 const sessions = new Map<string, SessionRecord>();
 
 seedSession("local-machine", "Development Machine");
@@ -37,11 +37,17 @@ const server = http.createServer((request, response) => {
     return;
   }
 
+  if (request.method === "GET" && url.pathname === "/api/config") {
+    writeJson(response, 200, createEnvelope("relay.config", "system", relayConfig.publicConfig));
+    return;
+  }
+
   if (request.method === "GET" && url.pathname === "/api/sessions") {
-    if (!isViewerAuthorized(request, url)) {
-      writeJson(response, 401, {
+    const authorization = authorizeViewer(request, url, relayConfig);
+    if (!authorization.ok) {
+      writeJson(response, authorization.statusCode, {
         ok: false,
-        message: "Viewer key was missing or invalid."
+        message: authorization.message
       });
       return;
     }
@@ -55,10 +61,11 @@ const server = http.createServer((request, response) => {
 
   const streamMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/stream$/);
   if (request.method === "GET" && streamMatch) {
-    if (!isViewerAuthorized(request, url)) {
-      writeJson(response, 401, {
+    const authorization = authorizeViewer(request, url, relayConfig);
+    if (!authorization.ok) {
+      writeJson(response, authorization.statusCode, {
         ok: false,
-        message: "Viewer key was missing or invalid."
+        message: authorization.message
       });
       return;
     }
@@ -78,10 +85,11 @@ const server = http.createServer((request, response) => {
 
   const terminalMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/terminal$/);
   if (request.method === "GET" && terminalMatch) {
-    if (!isViewerAuthorized(request, url)) {
-      writeJson(response, 401, {
+    const authorization = authorizeViewer(request, url, relayConfig);
+    if (!authorization.ok) {
+      writeJson(response, authorization.statusCode, {
         ok: false,
-        message: "Viewer key was missing or invalid."
+        message: authorization.message
       });
       return;
     }
@@ -100,10 +108,11 @@ const server = http.createServer((request, response) => {
   }
 
   if (request.method === "POST" && terminalMatch) {
-    if (!isViewerAuthorized(request, url)) {
-      writeJson(response, 401, {
+    const authorization = authorizeViewer(request, url, relayConfig);
+    if (!authorization.ok) {
+      writeJson(response, authorization.statusCode, {
         ok: false,
-        message: "Viewer key was missing or invalid."
+        message: authorization.message
       });
       return;
     }
@@ -143,10 +152,11 @@ const server = http.createServer((request, response) => {
 
   const agentRegisterMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)$/);
   if ((request.method === "PUT" || request.method === "POST") && agentRegisterMatch) {
-    if (!isAgentAuthorized(request)) {
-      writeJson(response, 401, {
+    const authorization = authorizeAgent(request, relayConfig);
+    if (!authorization.ok) {
+      writeJson(response, authorization.statusCode, {
         ok: false,
-        message: "Agent key was missing or invalid."
+        message: authorization.message
       });
       return;
     }
@@ -178,10 +188,11 @@ const server = http.createServer((request, response) => {
 
   const agentCommandsMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)\/commands$/);
   if (request.method === "GET" && agentCommandsMatch) {
-    if (!isAgentAuthorized(request)) {
-      writeJson(response, 401, {
+    const authorization = authorizeAgent(request, relayConfig);
+    if (!authorization.ok) {
+      writeJson(response, authorization.statusCode, {
         ok: false,
-        message: "Agent key was missing or invalid."
+        message: authorization.message
       });
       return;
     }
@@ -205,10 +216,11 @@ const server = http.createServer((request, response) => {
 
   const agentOutputMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)\/output$/);
   if (request.method === "POST" && agentOutputMatch) {
-    if (!isAgentAuthorized(request)) {
-      writeJson(response, 401, {
+    const authorization = authorizeAgent(request, relayConfig);
+    if (!authorization.ok) {
+      writeJson(response, authorization.statusCode, {
         ok: false,
-        message: "Agent key was missing or invalid."
+        message: authorization.message
       });
       return;
     }
@@ -503,16 +515,3 @@ type SessionRecord = {
   pendingCommands: ReturnType<typeof createAgentCommand>[];
   streams: Set<http.ServerResponse>;
 };
-
-function isViewerAuthorized(request: http.IncomingMessage, url: URL): boolean {
-  const headerValue = request.headers["x-remote-console-viewer-key"];
-  const keyFromHeader = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-  const keyFromQuery = url.searchParams.get("viewerKey");
-  return keyFromHeader === viewerSharedKey || keyFromQuery === viewerSharedKey;
-}
-
-function isAgentAuthorized(request: http.IncomingMessage): boolean {
-  const headerValue = request.headers["x-remote-console-agent-key"];
-  const keyFromHeader = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-  return keyFromHeader === agentSharedKey;
-}

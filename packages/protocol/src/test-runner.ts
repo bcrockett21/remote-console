@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createAgentCommand, createEnvelope, createTerminalLine, isTransportEnvelope } from "./index.js";
+import { createAgentCommand, createEnvelope, createTerminalLine, isRelayAuthMode, isTransportEnvelope } from "./index.js";
 
 run("createEnvelope returns a stable transport envelope", () => {
   const now = new Date("2026-04-22T10:00:00.000Z");
@@ -51,7 +51,13 @@ run("createAgentCommand returns a stable queued command", () => {
   });
 });
 
-console.log("4 protocol test(s) passed.");
+run("isRelayAuthMode validates supported auth modes", () => {
+  assert.equal(isRelayAuthMode("shared-key"), true);
+  assert.equal(isRelayAuthMode("entra-id"), true);
+  assert.equal(isRelayAuthMode("oauth"), false);
+});
+
+console.log("5 protocol test(s) passed.");
 
 function run(name: string, fn: () => void): void {
   try {

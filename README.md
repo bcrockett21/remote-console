@@ -26,7 +26,7 @@ Remote Console is a Microsoft Teams-first remote terminal project for viewing an
 This initial build slice provides:
 
 - a typed shared protocol package
-- a relay server with shared-key protection for viewer and agent traffic
+- a relay server with explicit auth-mode configuration, a public `/api/config` capability summary, and shared-key protection for current viewer and agent traffic
 - a Windows agent that authenticates to the relay, polls queued commands, and executes them through a persistent PowerShell process
-- a Teams tab shell that stores a viewer key locally, streams terminal updates from the relay, and submits typed commands into the active session
+- a Teams tab shell that reads relay auth capabilities, stores a viewer key locally for shared-key mode, streams terminal updates from the relay, and submits typed commands into the active session
 - root build and test commands

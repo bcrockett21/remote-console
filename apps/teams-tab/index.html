@@ -14,6 +14,7 @@
           <p class="shell__eyebrow">Teams Personal Tab</p>
           <h1>Remote Console</h1>
           <p class="shell__subtitle">Terminal-first remote access for Codex sessions on desktop and iPhone.</p>
+          <p id="auth-status" class="shell__meta">Auth: loading relay configuration...</p>
         </div>
         <span id="session-status" class="shell__status">Session: connecting...</span>
       </section>
@@ -28,7 +29,7 @@
           <span>Relay URL</span>
           <input id="relay-url" type="text" value="http://localhost:4040" />
         </label>
-        <label class="shell__field">
+        <label id="viewer-key-field" class="shell__field">
           <span>Viewer Key</span>
           <input id="viewer-key" type="password" value="viewer-dev-key" />
         </label>

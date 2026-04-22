@@ -13,19 +13,33 @@ The current Teams tab is a static web client served from `apps/teams-tab`.
 
 The tab host defaults to `http://localhost:53000`.
 
-## Shared Keys
+## Relay Auth Modes
 
-Current development auth is based on shared keys.
+The tab now reads relay auth capabilities from `GET /api/config` before loading sessions.
+
+### `RELAY_AUTH_MODE=shared-key`
+
+This remains the default development path.
 
 - Relay viewer traffic uses `VIEWER_SHARED_KEY`
 - Relay agent traffic uses `AGENT_SHARED_KEY`
 - The Teams tab sends the viewer key as a header for fetch requests and as a query parameter for the SSE stream
 - The Windows agent sends the agent key as a request header
+- The tab keeps the viewer-key field visible and stores the value in `localStorage`
 
 Defaults for local development:
 
 - `VIEWER_SHARED_KEY=viewer-dev-key`
 - `AGENT_SHARED_KEY=agent-dev-key`
+
+### `RELAY_AUTH_MODE=entra-id`
+
+This is now an explicit planning mode for Teams-compatible identity work.
+
+- The relay advertises Entra-backed viewer auth through `/api/config`
+- The tab hides the viewer-key field and explains that identity-backed access is not wired yet
+- Protected viewer routes currently return `501` until token acquisition and token validation are implemented
+- `AUTHORIZED_VIEWER_OBJECT_IDS` can be set as a comma-separated list to define the intended per-user machine allowlist shape
 
 ## Teams App Package
 
@@ -53,4 +67,5 @@ The rendered manifest is written to:
 - the manifest is a development template, not a production package
 - the tab client can initialize the Teams JavaScript SDK when hosted inside Teams
 - the local static host is plain HTTP; a real Teams install will need an HTTPS host such as a dev tunnel or deployed environment
-- auth is still development-grade shared-key auth, not Entra-backed Teams identity
+- the relay now exposes an auth capability document at `/api/config`
+- Entra-backed Teams identity is scaffolded at the config level, but token acquisition and validation are still not implemented

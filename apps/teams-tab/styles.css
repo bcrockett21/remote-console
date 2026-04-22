@@ -42,6 +42,12 @@ body {
   color: #b8b0a3;
 }
 
+.shell__meta {
+  margin: 12px 0 0;
+  color: #8fd3c8;
+  font-size: 14px;
+}
+
 .shell__status {
   padding: 10px 14px;
   border: 1px solid rgba(238, 219, 181, 0.3);
