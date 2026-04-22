@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createEnvelope, isTransportEnvelope } from "./index.js";
+import { createEnvelope, createTerminalLine, isTransportEnvelope } from "./index.js";
 
 run("createEnvelope returns a stable transport envelope", () => {
   const now = new Date("2026-04-22T10:00:00.000Z");
@@ -28,7 +28,19 @@ run("isTransportEnvelope rejects malformed values", () => {
   }), true);
 });
 
-console.log("2 protocol test(s) passed.");
+run("createTerminalLine returns a stable terminal line", () => {
+  const now = new Date("2026-04-22T10:05:00.000Z");
+  const line = createTerminalLine("line-1", "stdout", "ready", now);
+
+  assert.deepEqual(line, {
+    id: "line-1",
+    stream: "stdout",
+    text: "ready",
+    createdAt: "2026-04-22T10:05:00.000Z"
+  });
+});
+
+console.log("3 protocol test(s) passed.");
 
 function run(name: string, fn: () => void): void {
   try {

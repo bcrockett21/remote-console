@@ -14,16 +14,26 @@
           <h1>Remote Console</h1>
           <p class="shell__subtitle">Terminal-first remote access for Codex sessions on desktop and iPhone.</p>
         </div>
-        <span class="shell__status">Session: local-machine</span>
+        <span id="session-status" class="shell__status">Session: connecting...</span>
+      </section>
+
+      <section class="shell__toolbar">
+        <label class="shell__field">
+          <span>Relay URL</span>
+          <input id="relay-url" type="text" value="http://localhost:4040" />
+        </label>
+        <label class="shell__field">
+          <span>Session</span>
+          <select id="session-select"></select>
+        </label>
+        <button id="refresh-button" class="shell__button" type="button">Refresh</button>
       </section>
 
       <section class="terminal">
-        <div class="terminal__line"><span class="terminal__prompt">codex@remote</span> connecting to relay-server...</div>
-        <div class="terminal__line"><span class="terminal__prompt">relay</span> /api/sessions returned 1 session</div>
-        <div class="terminal__line"><span class="terminal__prompt">agent</span> windows-agent stub ready</div>
+        <div id="terminal-lines" class="terminal__lines"></div>
         <label class="terminal__input-row">
           <span class="terminal__prompt">></span>
-          <input id="command-input" class="terminal__input" type="text" autocomplete="off" placeholder="Typed commands will go here in the live Teams terminal." />
+          <input id="command-input" class="terminal__input" type="text" autocomplete="off" placeholder="Type a command and press Enter." />
         </label>
       </section>
     </main>

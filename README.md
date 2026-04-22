@@ -23,7 +23,7 @@ Remote Console is a Microsoft Teams-first remote terminal project for viewing an
 This initial build slice provides:
 
 - a typed shared protocol package
-- a minimal relay server with health and session endpoints
+- a minimal relay server with health, session, terminal snapshot, and command submission endpoints
 - a Windows agent CLI stub
-- a Teams tab shell with a terminal-style layout
+- a Teams tab shell that loads session state from the relay and appends typed commands into a terminal view
 - root build and test commands

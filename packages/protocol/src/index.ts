@@ -14,6 +14,13 @@ export type SessionDescriptor = {
   updatedAt: string;
 };
 
+export type TerminalLine = {
+  id: string;
+  stream: "stdout" | "stderr" | "system" | "input";
+  text: string;
+  createdAt: string;
+};
+
 export type TerminalInputPayload = {
   data: string;
 };
@@ -27,9 +34,15 @@ export type SessionSnapshotPayload = {
   sessions: SessionDescriptor[];
 };
 
+export type TerminalSnapshotPayload = {
+  session: SessionDescriptor;
+  lines: TerminalLine[];
+};
+
 export type TerminalInputEvent = TransportEnvelope<"terminal.input", TerminalInputPayload>;
 export type TerminalOutputEvent = TransportEnvelope<"terminal.output", TerminalOutputPayload>;
 export type SessionSnapshotEvent = TransportEnvelope<"session.snapshot", SessionSnapshotPayload>;
+export type TerminalSnapshotEvent = TransportEnvelope<"terminal.snapshot", TerminalSnapshotPayload>;
 
 export function createEnvelope<TType extends string, TPayload>(
   type: TType,
@@ -55,4 +68,18 @@ export function isTransportEnvelope(value: unknown): value is TransportEnvelope<
     && typeof candidate.sessionId === "string"
     && typeof candidate.timestamp === "string"
     && "payload" in candidate;
+}
+
+export function createTerminalLine(
+  id: string,
+  stream: TerminalLine["stream"],
+  text: string,
+  now: Date = new Date())
+: TerminalLine {
+  return {
+    id,
+    stream,
+    text,
+    createdAt: now.toISOString()
+  };
 }
