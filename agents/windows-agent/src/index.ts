@@ -3,6 +3,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 const relayUrl = process.env.RELAY_URL ?? "http://localhost:4040";
 const sessionId = process.env.SESSION_ID ?? "local-machine";
 const machineName = process.env.MACHINE_NAME ?? "Development Machine";
+const agentSharedKey = process.env.AGENT_SHARED_KEY ?? "agent-dev-key";
 const shellCommand = process.env.SHELL_COMMAND ?? "powershell.exe";
 const shellArgs = process.env.SHELL_ARGS?.split(" ").filter(Boolean) ?? ["-NoLogo", "-NoProfile"];
 const pollIntervalMs = Number.parseInt(process.env.POLL_INTERVAL_MS ?? "2000", 10);
@@ -47,7 +48,8 @@ async function registerAgent(): Promise<void> {
   const response = await fetch(`${relayUrl}/api/agent/sessions/${sessionId}`, {
     method: "PUT",
     headers: {
-      "content-type": "application/json"
+      "content-type": "application/json",
+      "x-remote-console-agent-key": agentSharedKey
     },
     body: JSON.stringify({
       machineName
@@ -77,7 +79,11 @@ async function pollCommands(): Promise<void> {
     return;
   }
 
-  const response = await fetch(`${relayUrl}/api/agent/sessions/${sessionId}/commands`);
+  const response = await fetch(`${relayUrl}/api/agent/sessions/${sessionId}/commands`, {
+    headers: {
+      "x-remote-console-agent-key": agentSharedKey
+    }
+  });
   if (!response.ok) {
     console.error(`[windows-agent] command poll failed with ${response.status}`);
     return;
@@ -110,7 +116,8 @@ async function sendOutput(
   const response = await fetch(`${relayUrl}/api/agent/sessions/${sessionId}/output`, {
     method: "POST",
     headers: {
-      "content-type": "application/json"
+      "content-type": "application/json",
+      "x-remote-console-agent-key": agentSharedKey
     },
     body: JSON.stringify({
       commandId,

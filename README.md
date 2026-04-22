@@ -18,6 +18,7 @@ Remote Console is a Microsoft Teams-first remote terminal project for viewing an
 - `npm run build`
 - `npm run start:relay`
 - `npm run start:agent`
+- `npm run start:tab`
 - `npm test`
 
 ## Current Scope
@@ -25,7 +26,7 @@ Remote Console is a Microsoft Teams-first remote terminal project for viewing an
 This initial build slice provides:
 
 - a typed shared protocol package
-- a minimal relay server with session discovery, command queueing, terminal snapshots, and server-sent event streaming
-- a Windows agent that registers with the relay, polls queued commands, and executes them through a persistent PowerShell process
-- a Teams tab shell that streams terminal updates from the relay and submits typed commands into the active session
+- a relay server with shared-key protection for viewer and agent traffic
+- a Windows agent that authenticates to the relay, polls queued commands, and executes them through a persistent PowerShell process
+- a Teams tab shell that stores a viewer key locally, streams terminal updates from the relay, and submits typed commands into the active session
 - root build and test commands

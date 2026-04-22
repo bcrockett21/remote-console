@@ -13,6 +13,20 @@ The current Teams tab is a static web client served from `apps/teams-tab`.
 
 The tab host defaults to `http://localhost:53000`.
 
+## Shared Keys
+
+Current development auth is based on shared keys.
+
+- Relay viewer traffic uses `VIEWER_SHARED_KEY`
+- Relay agent traffic uses `AGENT_SHARED_KEY`
+- The Teams tab sends the viewer key as a header for fetch requests and as a query parameter for the SSE stream
+- The Windows agent sends the agent key as a request header
+
+Defaults for local development:
+
+- `VIEWER_SHARED_KEY=viewer-dev-key`
+- `AGENT_SHARED_KEY=agent-dev-key`
+
 ## Teams App Package
 
 The repository includes a Teams app manifest template at:
@@ -39,3 +53,4 @@ The rendered manifest is written to:
 - the manifest is a development template, not a production package
 - the tab client can initialize the Teams JavaScript SDK when hosted inside Teams
 - the local static host is plain HTTP; a real Teams install will need an HTTPS host such as a dev tunnel or deployed environment
+- auth is still development-grade shared-key auth, not Entra-backed Teams identity

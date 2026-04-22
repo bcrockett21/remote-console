@@ -1,4 +1,5 @@
 const relayInput = document.getElementById("relay-url");
+const viewerKeyInput = document.getElementById("viewer-key");
 const sessionStatus = document.getElementById("session-status");
 const sessionSelect = document.getElementById("session-select");
 const refreshButton = document.getElementById("refresh-button");
@@ -8,6 +9,7 @@ const teamsBanner = document.getElementById("teams-banner");
 
 const state = {
   relayUrl: relayInput instanceof HTMLInputElement ? relayInput.value.trim() : "http://localhost:4040",
+  viewerKey: viewerKeyInput instanceof HTMLInputElement ? viewerKeyInput.value.trim() : "viewer-dev-key",
   sessionId: "local-machine",
   stream: null,
   inTeams: false
@@ -15,6 +17,7 @@ const state = {
 
 if (
   relayInput instanceof HTMLInputElement &&
+  viewerKeyInput instanceof HTMLInputElement &&
   sessionStatus instanceof HTMLElement &&
   sessionSelect instanceof HTMLSelectElement &&
   refreshButton instanceof HTMLButtonElement &&
@@ -22,9 +25,18 @@ if (
   input instanceof HTMLInputElement
 ) {
   void initializeTeamsContext();
+  loadStoredSettings();
 
   relayInput.addEventListener("change", async () => {
     state.relayUrl = relayInput.value.trim();
+    storeSettings();
+    closeStream();
+    await loadSessions();
+  });
+
+  viewerKeyInput.addEventListener("change", async () => {
+    state.viewerKey = viewerKeyInput.value.trim();
+    storeSettings();
     closeStream();
     await loadSessions();
   });
@@ -55,7 +67,8 @@ if (
       await fetch(`${state.relayUrl}/api/sessions/${state.sessionId}/terminal`, {
         method: "POST",
         headers: {
-          "content-type": "application/json"
+          "content-type": "application/json",
+          "x-remote-console-viewer-key": state.viewerKey
         },
         body: JSON.stringify({
           data: value
@@ -105,7 +118,9 @@ async function loadSessions() {
   setStatus("Loading sessions...");
 
   try {
-    const response = await fetch(`${state.relayUrl}/api/sessions`);
+    const response = await fetch(`${state.relayUrl}/api/sessions`, {
+      headers: viewerHeaders()
+    });
     if (!response.ok) {
       throw new Error(`Session request failed with ${response.status}`);
     }
@@ -156,7 +171,9 @@ async function loadTerminal() {
   }
 
   try {
-    const response = await fetch(`${state.relayUrl}/api/sessions/${state.sessionId}/terminal`);
+    const response = await fetch(`${state.relayUrl}/api/sessions/${state.sessionId}/terminal`, {
+      headers: viewerHeaders()
+    });
     if (!response.ok) {
       throw new Error(`Terminal request failed with ${response.status}`);
     }
@@ -181,7 +198,7 @@ function openStream() {
 
   closeStream();
 
-  const stream = new EventSource(`${state.relayUrl}/api/sessions/${state.sessionId}/stream`);
+  const stream = new EventSource(`${state.relayUrl}/api/sessions/${state.sessionId}/stream?viewerKey=${encodeURIComponent(state.viewerKey)}`);
   state.stream = stream;
 
   stream.addEventListener("snapshot", (event) => {
@@ -246,6 +263,40 @@ function promptForStream(stream) {
 
 function setStatus(text) {
   sessionStatus.textContent = text;
+}
+
+function viewerHeaders() {
+  return {
+    "x-remote-console-viewer-key": state.viewerKey
+  };
+}
+
+function loadStoredSettings() {
+  try {
+    const storedRelayUrl = window.localStorage.getItem("remote-console.relay-url");
+    const storedViewerKey = window.localStorage.getItem("remote-console.viewer-key");
+
+    if (storedRelayUrl && relayInput instanceof HTMLInputElement) {
+      relayInput.value = storedRelayUrl;
+      state.relayUrl = storedRelayUrl;
+    }
+
+    if (storedViewerKey && viewerKeyInput instanceof HTMLInputElement) {
+      viewerKeyInput.value = storedViewerKey;
+      state.viewerKey = storedViewerKey;
+    }
+  } catch {
+    // Ignore storage failures in restricted environments.
+  }
+}
+
+function storeSettings() {
+  try {
+    window.localStorage.setItem("remote-console.relay-url", state.relayUrl);
+    window.localStorage.setItem("remote-console.viewer-key", state.viewerKey);
+  } catch {
+    // Ignore storage failures in restricted environments.
+  }
 }
 
 window.addEventListener("beforeunload", () => {

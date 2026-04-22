@@ -9,6 +9,8 @@ import {
 } from "@remote-console/protocol";
 
 const port = Number.parseInt(process.env.PORT ?? "4040", 10);
+const viewerSharedKey = process.env.VIEWER_SHARED_KEY ?? "viewer-dev-key";
+const agentSharedKey = process.env.AGENT_SHARED_KEY ?? "agent-dev-key";
 const sessions = new Map<string, SessionRecord>();
 
 seedSession("local-machine", "Development Machine");
@@ -36,6 +38,14 @@ const server = http.createServer((request, response) => {
   }
 
   if (request.method === "GET" && url.pathname === "/api/sessions") {
+    if (!isViewerAuthorized(request, url)) {
+      writeJson(response, 401, {
+        ok: false,
+        message: "Viewer key was missing or invalid."
+      });
+      return;
+    }
+
     const snapshot = createEnvelope("session.snapshot", "system", {
       sessions: Array.from(sessions.values(), value => value.session)
     });
@@ -45,6 +55,14 @@ const server = http.createServer((request, response) => {
 
   const streamMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/stream$/);
   if (request.method === "GET" && streamMatch) {
+    if (!isViewerAuthorized(request, url)) {
+      writeJson(response, 401, {
+        ok: false,
+        message: "Viewer key was missing or invalid."
+      });
+      return;
+    }
+
     const sessionRecord = sessions.get(streamMatch[1]);
     if (!sessionRecord) {
       writeJson(response, 404, {
@@ -60,6 +78,14 @@ const server = http.createServer((request, response) => {
 
   const terminalMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/terminal$/);
   if (request.method === "GET" && terminalMatch) {
+    if (!isViewerAuthorized(request, url)) {
+      writeJson(response, 401, {
+        ok: false,
+        message: "Viewer key was missing or invalid."
+      });
+      return;
+    }
+
     const sessionRecord = sessions.get(terminalMatch[1]);
     if (!sessionRecord) {
       writeJson(response, 404, {
@@ -74,6 +100,14 @@ const server = http.createServer((request, response) => {
   }
 
   if (request.method === "POST" && terminalMatch) {
+    if (!isViewerAuthorized(request, url)) {
+      writeJson(response, 401, {
+        ok: false,
+        message: "Viewer key was missing or invalid."
+      });
+      return;
+    }
+
     const sessionRecord = sessions.get(terminalMatch[1]);
     if (!sessionRecord) {
       writeJson(response, 404, {
@@ -109,6 +143,14 @@ const server = http.createServer((request, response) => {
 
   const agentRegisterMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)$/);
   if ((request.method === "PUT" || request.method === "POST") && agentRegisterMatch) {
+    if (!isAgentAuthorized(request)) {
+      writeJson(response, 401, {
+        ok: false,
+        message: "Agent key was missing or invalid."
+      });
+      return;
+    }
+
     collectBody(request)
       .then((body) => {
         const parsed = parseRegistrationRequest(body);
@@ -136,6 +178,14 @@ const server = http.createServer((request, response) => {
 
   const agentCommandsMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)\/commands$/);
   if (request.method === "GET" && agentCommandsMatch) {
+    if (!isAgentAuthorized(request)) {
+      writeJson(response, 401, {
+        ok: false,
+        message: "Agent key was missing or invalid."
+      });
+      return;
+    }
+
     const sessionRecord = sessions.get(agentCommandsMatch[1]);
     if (!sessionRecord) {
       writeJson(response, 404, {
@@ -155,6 +205,14 @@ const server = http.createServer((request, response) => {
 
   const agentOutputMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)\/output$/);
   if (request.method === "POST" && agentOutputMatch) {
+    if (!isAgentAuthorized(request)) {
+      writeJson(response, 401, {
+        ok: false,
+        message: "Agent key was missing or invalid."
+      });
+      return;
+    }
+
     const sessionRecord = sessions.get(agentOutputMatch[1]);
     if (!sessionRecord) {
       writeJson(response, 404, {
@@ -336,7 +394,7 @@ function writeJson(response: http.ServerResponse, statusCode: number, payload: u
 function writeCorsHeaders(response: http.ServerResponse): void {
   response.setHeader("access-control-allow-origin", "*");
   response.setHeader("access-control-allow-methods", "GET,POST,PUT,OPTIONS");
-  response.setHeader("access-control-allow-headers", "content-type");
+  response.setHeader("access-control-allow-headers", "content-type,x-remote-console-agent-key,x-remote-console-viewer-key");
 }
 
 function collectBody(request: http.IncomingMessage): Promise<string> {
@@ -445,3 +503,16 @@ type SessionRecord = {
   pendingCommands: ReturnType<typeof createAgentCommand>[];
   streams: Set<http.ServerResponse>;
 };
+
+function isViewerAuthorized(request: http.IncomingMessage, url: URL): boolean {
+  const headerValue = request.headers["x-remote-console-viewer-key"];
+  const keyFromHeader = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  const keyFromQuery = url.searchParams.get("viewerKey");
+  return keyFromHeader === viewerSharedKey || keyFromQuery === viewerSharedKey;
+}
+
+function isAgentAuthorized(request: http.IncomingMessage): boolean {
+  const headerValue = request.headers["x-remote-console-agent-key"];
+  const keyFromHeader = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  return keyFromHeader === agentSharedKey;
+}
