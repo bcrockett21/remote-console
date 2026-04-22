@@ -51,6 +51,25 @@ body {
   white-space: nowrap;
 }
 
+.shell__banner {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(238, 219, 181, 0.2);
+  border-radius: 16px;
+  background: rgba(255, 245, 232, 0.06);
+  color: #d9ceb9;
+}
+
+.shell__banner strong {
+  color: #fff3de;
+}
+
+.shell__banner--teams {
+  border-color: rgba(115, 216, 207, 0.35);
+  background: rgba(115, 216, 207, 0.08);
+  color: #ddf3ef;
+}
+
 .shell__toolbar {
   display: flex;
   gap: 14px;

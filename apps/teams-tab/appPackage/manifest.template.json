@@ -1,0 +1,48 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.19",
+  "version": "0.1.0",
+  "id": "1e6a4b80-31bf-4fc6-b7ab-8e3f8f086cb7",
+  "packageName": "com.bcrockett.remoteconsole",
+  "developer": {
+    "name": "bcrockett21",
+    "websiteUrl": "https://github.com/bcrockett21/remote-console",
+    "privacyUrl": "https://github.com/bcrockett21/remote-console/blob/main/README.md",
+    "termsOfUseUrl": "https://github.com/bcrockett21/remote-console/blob/main/README.md"
+  },
+  "name": {
+    "short": "Remote Console",
+    "full": "Remote Console for Teams"
+  },
+  "description": {
+    "short": "Terminal-style remote access to a Codex-backed machine session.",
+    "full": "Remote Console provides a Teams personal tab for viewing and interacting with a Windows-hosted Codex terminal session from desktop and iPhone."
+  },
+  "icons": {
+    "outline": "outline.png",
+    "color": "color.png"
+  },
+  "accentColor": "#111722",
+  "staticTabs": [
+    {
+      "entityId": "remote-console-tab",
+      "name": "Remote Console",
+      "contentUrl": "{{APP_BASE_URL}}/index.html",
+      "websiteUrl": "{{APP_BASE_URL}}/index.html",
+      "scopes": [
+        "personal"
+      ]
+    }
+  ],
+  "permissions": [
+    "identity",
+    "messageTeamMembers"
+  ],
+  "validDomains": [
+    "{{APP_DOMAIN}}"
+  ],
+  "webApplicationInfo": {
+    "id": "{{MICROSOFT_APP_ID}}",
+    "resource": "api://{{APP_DOMAIN}}/{{MICROSOFT_APP_ID}}"
+  }
+}

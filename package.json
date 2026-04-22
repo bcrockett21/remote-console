@@ -11,6 +11,8 @@
     "build": "tsc -b packages/protocol services/relay-server agents/windows-agent",
     "start:relay": "node services/relay-server/dist/server.js",
     "start:agent": "node agents/windows-agent/dist/index.js",
+    "start:tab": "node scripts/serve-teams-tab.mjs",
+    "build:teams-manifest": "node scripts/prepare-teams-manifest.mjs",
     "test": "npm run build && node packages/protocol/dist/test-runner.js",
     "lint": "tsc -b --pretty false packages/protocol services/relay-server agents/windows-agent"
   },

@@ -4,11 +4,13 @@ const sessionSelect = document.getElementById("session-select");
 const refreshButton = document.getElementById("refresh-button");
 const terminalLines = document.getElementById("terminal-lines");
 const input = document.getElementById("command-input");
+const teamsBanner = document.getElementById("teams-banner");
 
 const state = {
   relayUrl: relayInput instanceof HTMLInputElement ? relayInput.value.trim() : "http://localhost:4040",
   sessionId: "local-machine",
-  stream: null
+  stream: null,
+  inTeams: false
 };
 
 if (
@@ -19,6 +21,8 @@ if (
   terminalLines instanceof HTMLElement &&
   input instanceof HTMLInputElement
 ) {
+  void initializeTeamsContext();
+
   relayInput.addEventListener("change", async () => {
     state.relayUrl = relayInput.value.trim();
     closeStream();
@@ -73,6 +77,28 @@ if (
   });
 
   void loadSessions();
+}
+
+async function initializeTeamsContext() {
+  const teams = window.microsoftTeams;
+  if (!teams?.app) {
+    return;
+  }
+
+  try {
+    await teams.app.initialize();
+    const context = await teams.app.getContext();
+    state.inTeams = true;
+
+    if (teamsBanner instanceof HTMLElement) {
+      teamsBanner.textContent = `Running inside Teams for ${context.app.host.name}.`;
+      teamsBanner.classList.add("shell__banner--teams");
+    }
+  } catch {
+    if (teamsBanner instanceof HTMLElement) {
+      teamsBanner.textContent = "Teams SDK was detected but initialization failed. Staying in browser preview mode.";
+    }
+  }
 }
 
 async function loadSessions() {

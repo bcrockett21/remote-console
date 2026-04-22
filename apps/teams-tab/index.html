@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Remote Console</title>
     <link rel="stylesheet" href="./styles.css" />
+    <script src="https://res.cdn.office.net/teams-js/2.33.0/js/MicrosoftTeams.min.js" defer></script>
   </head>
   <body>
     <main class="shell">
@@ -15,6 +16,11 @@
           <p class="shell__subtitle">Terminal-first remote access for Codex sessions on desktop and iPhone.</p>
         </div>
         <span id="session-status" class="shell__status">Session: connecting...</span>
+      </section>
+
+      <section class="shell__banner" id="teams-banner">
+        <strong>Browser preview mode.</strong>
+        Launch this page inside Microsoft Teams to validate the full personal-tab experience.
       </section>
 
       <section class="shell__toolbar">
