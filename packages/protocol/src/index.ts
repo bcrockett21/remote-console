@@ -8,7 +8,7 @@ export type TransportEnvelope<TType extends string, TPayload> = {
 export type SessionState = "connecting" | "connected" | "disconnected";
 
 export type RelayAuthMode = "shared-key" | "entra-id";
-export type RelayAuthorizationMode = "development-shared-key" | "entra-viewer-allowlist";
+export type RelayAuthorizationMode = "development-shared-key" | "entra-viewer-allowlist" | "entra-session-allowlist";
 
 export type SessionDescriptor = {
   id: string;
@@ -70,7 +70,10 @@ export type RelayConfigPayload = {
     mode: RelayAuthMode;
     status: "ready" | "planned";
     viewerKeyHeaderName: string | null;
+    accessTokenHeaderName: string | null;
     teamsSsoEnabled: boolean;
+    requiresTeamsHost: boolean;
+    expectedAudience: string | null;
   };
   agentAuth: {
     mode: "shared-key";
@@ -80,6 +83,7 @@ export type RelayConfigPayload = {
   authorization: {
     mode: RelayAuthorizationMode;
     allowedViewerCount: number;
+    sessionBindingCount: number;
     requiresUserMapping: boolean;
     machineBindingEnabled: boolean;
   };

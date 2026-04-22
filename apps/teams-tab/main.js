@@ -13,7 +13,7 @@ const state = {
   relayUrl: relayInput instanceof HTMLInputElement ? relayInput.value.trim() : "http://localhost:4040",
   viewerKey: viewerKeyInput instanceof HTMLInputElement ? viewerKeyInput.value.trim() : "viewer-dev-key",
   sessionId: "local-machine",
-  stream: null,
+  streamHandle: null,
   inTeams: false,
   teamsHostName: "",
   relayConfig: defaultRelayConfig()
@@ -28,7 +28,6 @@ if (
   terminalLines instanceof HTMLElement &&
   input instanceof HTMLInputElement
 ) {
-  void initializeTeamsContext();
   loadStoredSettings();
   updateAuthUi();
 
@@ -51,7 +50,7 @@ if (
     state.sessionId = sessionSelect.value;
     closeStream();
     await loadTerminal();
-    openStream();
+    await openStream();
   });
 
   refreshButton.addEventListener("click", async () => {
@@ -71,16 +70,20 @@ if (
 
     input.disabled = true;
     try {
-      await fetch(`${state.relayUrl}/api/sessions/${state.sessionId}/terminal`, {
+      const response = await fetch(`${state.relayUrl}/api/sessions/${state.sessionId}/terminal`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          ...viewerHeaders()
+          ...await getViewerHeaders()
         },
         body: JSON.stringify({
           data: value
         })
       });
+
+      if (!response.ok) {
+        throw new Error(await responseErrorMessage(response, "Failed to send terminal input."));
+      }
 
       input.value = "";
     } catch (error) {
@@ -100,6 +103,7 @@ if (
 }
 
 async function bootstrap() {
+  await initializeTeamsContext();
   await loadRelayConfig();
   await loadSessions();
 }
@@ -153,10 +157,10 @@ async function loadSessions() {
 
   try {
     const response = await fetch(`${state.relayUrl}/api/sessions`, {
-      headers: viewerHeaders()
+      headers: await getViewerHeaders()
     });
     if (!response.ok) {
-      throw new Error(`Session request failed with ${response.status}`);
+      throw new Error(await responseErrorMessage(response, "Failed to load sessions."));
     }
 
     const snapshot = await response.json();
@@ -177,7 +181,7 @@ async function loadSessions() {
       sessionSelect.value = state.sessionId;
       setStatus(`Session: ${state.sessionId}`);
       await loadTerminal();
-      openStream();
+      await openStream();
       return;
     }
 
@@ -206,10 +210,10 @@ async function loadTerminal() {
 
   try {
     const response = await fetch(`${state.relayUrl}/api/sessions/${state.sessionId}/terminal`, {
-      headers: viewerHeaders()
+      headers: await getViewerHeaders()
     });
     if (!response.ok) {
-      throw new Error(`Terminal request failed with ${response.status}`);
+      throw new Error(await responseErrorMessage(response, "Failed to load terminal snapshot."));
     }
 
     const snapshot = await response.json();
@@ -225,15 +229,29 @@ async function loadTerminal() {
   }
 }
 
-function openStream() {
-  if (!state.sessionId || typeof EventSource === "undefined") {
+async function openStream() {
+  if (!state.sessionId) {
     return;
   }
 
   closeStream();
 
+  if (state.relayConfig?.viewerAuth?.mode === "shared-key" && typeof EventSource !== "undefined") {
+    openEventSourceStream();
+    return;
+  }
+
+  await openAuthenticatedStream();
+}
+
+function openEventSourceStream() {
   const stream = new EventSource(buildStreamUrl());
-  state.stream = stream;
+  const handle = {
+    close() {
+      stream.close();
+    }
+  };
+  state.streamHandle = handle;
 
   stream.addEventListener("snapshot", (event) => {
     const message = JSON.parse(event.data);
@@ -245,12 +263,105 @@ function openStream() {
   };
 }
 
+async function openAuthenticatedStream() {
+  const abortController = new AbortController();
+  const handle = {
+    close() {
+      abortController.abort();
+    }
+  };
+  state.streamHandle = handle;
+
+  try {
+    const response = await fetch(buildStreamUrl(), {
+      headers: await getViewerHeaders(),
+      signal: abortController.signal
+    });
+
+    if (!response.ok) {
+      throw new Error(await responseErrorMessage(response, "Failed to open session stream."));
+    }
+
+    if (!response.body) {
+      throw new Error("Browser did not expose a readable stream for terminal updates.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (state.streamHandle === handle) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, {
+        stream: true
+      });
+      buffer = processSseBuffer(buffer);
+    }
+  } catch (error) {
+    if (abortController.signal.aborted) {
+      return;
+    }
+
+    setStatus(`Session: ${state.sessionId} (stream disconnected)`);
+    renderLines([
+      {
+        stream: "stderr",
+        text: error instanceof Error ? error.message : "Failed to open session stream."
+      }
+    ]);
+  }
+}
+
 function closeStream() {
-  if (state.stream instanceof EventSource) {
-    state.stream.close();
+  if (state.streamHandle && typeof state.streamHandle.close === "function") {
+    state.streamHandle.close();
   }
 
-  state.stream = null;
+  state.streamHandle = null;
+}
+
+function processSseBuffer(buffer) {
+  const messages = buffer.split("\n\n");
+  const remainder = messages.pop() ?? "";
+
+  for (const message of messages) {
+    const parsed = parseSseMessage(message);
+    if (parsed.event === "snapshot" && parsed.data) {
+      applySnapshot(JSON.parse(parsed.data));
+    }
+  }
+
+  return remainder;
+}
+
+function parseSseMessage(message) {
+  const lines = message.split("\n");
+  let eventName = "message";
+  const dataLines = [];
+
+  for (const line of lines) {
+    if (line.startsWith(":")) {
+      continue;
+    }
+
+    if (line.startsWith("event:")) {
+      eventName = line.slice("event:".length).trim();
+      continue;
+    }
+
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice("data:".length).trimStart());
+    }
+  }
+
+  return {
+    event: eventName,
+    data: dataLines.join("\n")
+  };
 }
 
 function applySnapshot(snapshot) {
@@ -305,14 +416,36 @@ function setAuthStatus(text) {
   }
 }
 
-function viewerHeaders() {
-  if (state.relayConfig?.viewerAuth?.mode !== "shared-key") {
-    return {};
+async function getViewerHeaders() {
+  if (state.relayConfig?.viewerAuth?.mode !== "entra-id") {
+    return {
+      "x-remote-console-viewer-key": state.viewerKey
+    };
   }
 
+  const accessToken = await getTeamsAccessToken();
   return {
-    "x-remote-console-viewer-key": state.viewerKey
+    Authorization: `Bearer ${accessToken}`
   };
+}
+
+async function getTeamsAccessToken() {
+  if (!state.inTeams) {
+    throw new Error("Teams SSO viewer auth requires opening the tab inside Microsoft Teams.");
+  }
+
+  const teams = window.microsoftTeams;
+  if (!teams?.authentication?.getAuthToken) {
+    throw new Error("Teams authentication SDK was unavailable in this host.");
+  }
+
+  try {
+    return await teams.authentication.getAuthToken();
+  } catch (error) {
+    throw new Error(error instanceof Error
+      ? `Teams SSO token request failed: ${error.message}`
+      : "Teams SSO token request failed.");
+  }
 }
 
 function buildStreamUrl() {
@@ -323,6 +456,17 @@ function buildStreamUrl() {
   }
 
   return url.toString();
+}
+
+async function responseErrorMessage(response, fallbackMessage) {
+  try {
+    const payload = await response.json();
+    return typeof payload?.message === "string"
+      ? payload.message
+      : `${fallbackMessage} (${response.status})`;
+  } catch {
+    return `${fallbackMessage} (${response.status})`;
+  }
 }
 
 function loadStoredSettings() {
@@ -368,8 +512,16 @@ function updateAuthUi() {
     return;
   }
 
-  setAuthStatus(`Auth: Entra ID planned mode with ${authorization.allowedViewerCount} configured viewer object id(s).`);
-  updateBanner("Relay is configured for Entra-backed Teams identity. Viewer token acquisition is not implemented in this tab yet.");
+  const hostMessage = state.inTeams
+    ? "Teams SSO mode."
+    : "Teams SSO mode. Open this tab inside Teams to authenticate.";
+  const scopeMessage = authorization.mode === "entra-session-allowlist"
+    ? ` ${authorization.sessionBindingCount} session binding(s) configured.`
+    : ` ${authorization.allowedViewerCount} configured viewer object id(s).`;
+  setAuthStatus(`${hostMessage}${scopeMessage}`);
+  updateBanner(state.inTeams
+    ? "Relay is configured for Entra-backed Teams identity. Session requests use Teams SSO bearer tokens."
+    : "Relay is configured for Entra-backed Teams identity. Open this page inside Microsoft Teams to acquire a viewer token.");
 }
 
 function updateBanner(overrideText) {
@@ -379,8 +531,8 @@ function updateBanner(overrideText) {
 
   if (state.relayConfig?.viewerAuth?.mode === "entra-id") {
     teamsBanner.textContent = overrideText
-      ?? "Relay is configured for Entra-backed Teams identity. Viewer token acquisition is not implemented in this tab yet.";
-    teamsBanner.classList.remove("shell__banner--teams");
+      ?? "Relay is configured for Entra-backed Teams identity.";
+    teamsBanner.classList.toggle("shell__banner--teams", state.inTeams);
     return;
   }
 
@@ -407,7 +559,10 @@ function defaultRelayConfig() {
       mode: "shared-key",
       status: "ready",
       viewerKeyHeaderName: "x-remote-console-viewer-key",
-      teamsSsoEnabled: false
+      accessTokenHeaderName: null,
+      teamsSsoEnabled: false,
+      requiresTeamsHost: false,
+      expectedAudience: null
     },
     agentAuth: {
       mode: "shared-key",
@@ -417,6 +572,7 @@ function defaultRelayConfig() {
     authorization: {
       mode: "development-shared-key",
       allowedViewerCount: 0,
+      sessionBindingCount: 0,
       requiresUserMapping: false,
       machineBindingEnabled: false
     }

@@ -7,7 +7,7 @@ import {
   type SessionDescriptor,
   type TerminalLine
 } from "@remote-console/protocol";
-import { authorizeAgent, authorizeViewer, loadRelayRuntimeConfig } from "./auth.js";
+import { authorizeAgent, authorizeViewer, canViewerAccessSession, filterAuthorizedSessions, loadRelayRuntimeConfig } from "./auth.js";
 
 const port = Number.parseInt(process.env.PORT ?? "4040", 10);
 const relayConfig = loadRelayRuntimeConfig(process.env);
@@ -15,253 +15,263 @@ const sessions = new Map<string, SessionRecord>();
 
 seedSession("local-machine", "Development Machine");
 
-const server = http.createServer((request, response) => {
-  if (!request.url) {
-    response.writeHead(400).end();
-    return;
-  }
+const server = http.createServer(async (request, response) => {
+  try {
+    if (!request.url) {
+      response.writeHead(400).end();
+      return;
+    }
 
-  const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
-  writeCorsHeaders(response);
+    const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
+    writeCorsHeaders(response);
 
-  if (request.method === "OPTIONS") {
-    response.writeHead(204).end();
-    return;
-  }
+    if (request.method === "OPTIONS") {
+      response.writeHead(204).end();
+      return;
+    }
 
-  if (request.method === "GET" && url.pathname === "/health") {
-    writeJson(response, 200, {
-      ok: true,
-      service: "relay-server"
-    });
-    return;
-  }
-
-  if (request.method === "GET" && url.pathname === "/api/config") {
-    writeJson(response, 200, createEnvelope("relay.config", "system", relayConfig.publicConfig));
-    return;
-  }
-
-  if (request.method === "GET" && url.pathname === "/api/sessions") {
-    const authorization = authorizeViewer(request, url, relayConfig);
-    if (!authorization.ok) {
-      writeJson(response, authorization.statusCode, {
-        ok: false,
-        message: authorization.message
+    if (request.method === "GET" && url.pathname === "/health") {
+      writeJson(response, 200, {
+        ok: true,
+        service: "relay-server"
       });
       return;
     }
 
-    const snapshot = createEnvelope("session.snapshot", "system", {
-      sessions: Array.from(sessions.values(), value => value.session)
-    });
-    writeJson(response, 200, snapshot);
-    return;
-  }
-
-  const streamMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/stream$/);
-  if (request.method === "GET" && streamMatch) {
-    const authorization = authorizeViewer(request, url, relayConfig);
-    if (!authorization.ok) {
-      writeJson(response, authorization.statusCode, {
-        ok: false,
-        message: authorization.message
-      });
+    if (request.method === "GET" && url.pathname === "/api/config") {
+      writeJson(response, 200, createEnvelope("relay.config", "system", relayConfig.publicConfig));
       return;
     }
 
-    const sessionRecord = sessions.get(streamMatch[1]);
-    if (!sessionRecord) {
-      writeJson(response, 404, {
-        ok: false,
-        message: "Session not found."
-      });
-      return;
-    }
-
-    openStream(response, sessionRecord);
-    return;
-  }
-
-  const terminalMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/terminal$/);
-  if (request.method === "GET" && terminalMatch) {
-    const authorization = authorizeViewer(request, url, relayConfig);
-    if (!authorization.ok) {
-      writeJson(response, authorization.statusCode, {
-        ok: false,
-        message: authorization.message
-      });
-      return;
-    }
-
-    const sessionRecord = sessions.get(terminalMatch[1]);
-    if (!sessionRecord) {
-      writeJson(response, 404, {
-        ok: false,
-        message: "Session not found."
-      });
-      return;
-    }
-
-    writeJson(response, 200, buildTerminalSnapshot(sessionRecord));
-    return;
-  }
-
-  if (request.method === "POST" && terminalMatch) {
-    const authorization = authorizeViewer(request, url, relayConfig);
-    if (!authorization.ok) {
-      writeJson(response, authorization.statusCode, {
-        ok: false,
-        message: authorization.message
-      });
-      return;
-    }
-
-    const sessionRecord = sessions.get(terminalMatch[1]);
-    if (!sessionRecord) {
-      writeJson(response, 404, {
-        ok: false,
-        message: "Session not found."
-      });
-      return;
-    }
-
-    collectBody(request)
-      .then((body) => {
-        const parsed = parseInputRequest(body);
-        if (!parsed.ok) {
-          writeJson(response, 400, {
-            ok: false,
-            message: parsed.message
-          });
-          return;
-        }
-
-        enqueueCommand(sessionRecord, parsed.data);
-        broadcastSnapshot(sessionRecord);
-        writeJson(response, 200, buildTerminalSnapshot(sessionRecord));
-      })
-      .catch((error: unknown) => {
-        writeJson(response, 500, {
+    if (request.method === "GET" && url.pathname === "/api/sessions") {
+      const authorization = await authorizeViewer(request, url, relayConfig);
+      if (!authorization.ok) {
+        writeJson(response, authorization.statusCode, {
           ok: false,
-          message: error instanceof Error ? error.message : "Unknown relay error."
+          message: authorization.message
         });
-      });
-    return;
-  }
+        return;
+      }
 
-  const agentRegisterMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)$/);
-  if ((request.method === "PUT" || request.method === "POST") && agentRegisterMatch) {
-    const authorization = authorizeAgent(request, relayConfig);
-    if (!authorization.ok) {
-      writeJson(response, authorization.statusCode, {
-        ok: false,
-        message: authorization.message
+      const snapshot = createEnvelope("session.snapshot", "system", {
+        sessions: filterAuthorizedSessions(
+          Array.from(sessions.values(), value => value.session),
+          authorization.viewer,
+          relayConfig)
       });
+      writeJson(response, 200, snapshot);
       return;
     }
 
-    collectBody(request)
-      .then((body) => {
-        const parsed = parseRegistrationRequest(body);
-        if (!parsed.ok) {
-          writeJson(response, 400, {
-            ok: false,
-            message: parsed.message
-          });
-          return;
-        }
-
-        const sessionRecord = ensureSession(agentRegisterMatch[1], parsed.machineName);
-        appendSystemLine(sessionRecord, `agent registered from ${parsed.machineName}`);
-        broadcastSnapshot(sessionRecord);
-        writeJson(response, 200, buildTerminalSnapshot(sessionRecord));
-      })
-      .catch((error: unknown) => {
-        writeJson(response, 500, {
+    const streamMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/stream$/);
+    if (request.method === "GET" && streamMatch) {
+      const authorization = await authorizeViewer(request, url, relayConfig);
+      if (!authorization.ok) {
+        writeJson(response, authorization.statusCode, {
           ok: false,
-          message: error instanceof Error ? error.message : "Unknown relay error."
+          message: authorization.message
         });
-      });
-    return;
-  }
+        return;
+      }
 
-  const agentCommandsMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)\/commands$/);
-  if (request.method === "GET" && agentCommandsMatch) {
-    const authorization = authorizeAgent(request, relayConfig);
-    if (!authorization.ok) {
-      writeJson(response, authorization.statusCode, {
-        ok: false,
-        message: authorization.message
-      });
+      const sessionRecord = sessions.get(streamMatch[1]);
+      if (!sessionRecord) {
+        writeJson(response, 404, {
+          ok: false,
+          message: "Session not found."
+        });
+        return;
+      }
+
+      if (!canViewerAccessSession(sessionRecord.session.id, authorization.viewer, relayConfig)) {
+        writeJson(response, 403, {
+          ok: false,
+          message: "Viewer is not authorized for this session."
+        });
+        return;
+      }
+
+      openStream(response, sessionRecord);
       return;
     }
 
-    const sessionRecord = sessions.get(agentCommandsMatch[1]);
-    if (!sessionRecord) {
-      writeJson(response, 404, {
-        ok: false,
-        message: "Session not found."
-      });
+    const terminalMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/terminal$/);
+    if (request.method === "GET" && terminalMatch) {
+      const authorization = await authorizeViewer(request, url, relayConfig);
+      if (!authorization.ok) {
+        writeJson(response, authorization.statusCode, {
+          ok: false,
+          message: authorization.message
+        });
+        return;
+      }
+
+      const sessionRecord = sessions.get(terminalMatch[1]);
+      if (!sessionRecord) {
+        writeJson(response, 404, {
+          ok: false,
+          message: "Session not found."
+        });
+        return;
+      }
+
+      if (!canViewerAccessSession(sessionRecord.session.id, authorization.viewer, relayConfig)) {
+        writeJson(response, 403, {
+          ok: false,
+          message: "Viewer is not authorized for this session."
+        });
+        return;
+      }
+
+      writeJson(response, 200, buildTerminalSnapshot(sessionRecord));
       return;
     }
 
-    const snapshot = createEnvelope("agent.commands", sessionRecord.session.id, {
-      session: sessionRecord.session,
-      pendingCommands: sessionRecord.pendingCommands
+    if (request.method === "POST" && terminalMatch) {
+      const authorization = await authorizeViewer(request, url, relayConfig);
+      if (!authorization.ok) {
+        writeJson(response, authorization.statusCode, {
+          ok: false,
+          message: authorization.message
+        });
+        return;
+      }
+
+      const sessionRecord = sessions.get(terminalMatch[1]);
+      if (!sessionRecord) {
+        writeJson(response, 404, {
+          ok: false,
+          message: "Session not found."
+        });
+        return;
+      }
+
+      if (!canViewerAccessSession(sessionRecord.session.id, authorization.viewer, relayConfig)) {
+        writeJson(response, 403, {
+          ok: false,
+          message: "Viewer is not authorized for this session."
+        });
+        return;
+      }
+
+      const body = await collectBody(request);
+      const parsed = parseInputRequest(body);
+      if (!parsed.ok) {
+        writeJson(response, 400, {
+          ok: false,
+          message: parsed.message
+        });
+        return;
+      }
+
+      enqueueCommand(sessionRecord, parsed.data);
+      broadcastSnapshot(sessionRecord);
+      writeJson(response, 200, buildTerminalSnapshot(sessionRecord));
+      return;
+    }
+
+    const agentRegisterMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)$/);
+    if ((request.method === "PUT" || request.method === "POST") && agentRegisterMatch) {
+      const authorization = authorizeAgent(request, relayConfig);
+      if (!authorization.ok) {
+        writeJson(response, authorization.statusCode, {
+          ok: false,
+          message: authorization.message
+        });
+        return;
+      }
+
+      const body = await collectBody(request);
+      const parsed = parseRegistrationRequest(body);
+      if (!parsed.ok) {
+        writeJson(response, 400, {
+          ok: false,
+          message: parsed.message
+        });
+        return;
+      }
+
+      const sessionRecord = ensureSession(agentRegisterMatch[1], parsed.machineName);
+      appendSystemLine(sessionRecord, `agent registered from ${parsed.machineName}`);
+      broadcastSnapshot(sessionRecord);
+      writeJson(response, 200, buildTerminalSnapshot(sessionRecord));
+      return;
+    }
+
+    const agentCommandsMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)\/commands$/);
+    if (request.method === "GET" && agentCommandsMatch) {
+      const authorization = authorizeAgent(request, relayConfig);
+      if (!authorization.ok) {
+        writeJson(response, authorization.statusCode, {
+          ok: false,
+          message: authorization.message
+        });
+        return;
+      }
+
+      const sessionRecord = sessions.get(agentCommandsMatch[1]);
+      if (!sessionRecord) {
+        writeJson(response, 404, {
+          ok: false,
+          message: "Session not found."
+        });
+        return;
+      }
+
+      const snapshot = createEnvelope("agent.commands", sessionRecord.session.id, {
+        session: sessionRecord.session,
+        pendingCommands: sessionRecord.pendingCommands
+      });
+      writeJson(response, 200, snapshot);
+      return;
+    }
+
+    const agentOutputMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)\/output$/);
+    if (request.method === "POST" && agentOutputMatch) {
+      const authorization = authorizeAgent(request, relayConfig);
+      if (!authorization.ok) {
+        writeJson(response, authorization.statusCode, {
+          ok: false,
+          message: authorization.message
+        });
+        return;
+      }
+
+      const sessionRecord = sessions.get(agentOutputMatch[1]);
+      if (!sessionRecord) {
+        writeJson(response, 404, {
+          ok: false,
+          message: "Session not found."
+        });
+        return;
+      }
+
+      const body = await collectBody(request);
+      const parsed = parseOutputRequest(body);
+      if (!parsed.ok) {
+        writeJson(response, 400, {
+          ok: false,
+          message: parsed.message
+        });
+        return;
+      }
+
+      appendOutput(sessionRecord, parsed.payload);
+      broadcastSnapshot(sessionRecord);
+      writeJson(response, 200, buildTerminalSnapshot(sessionRecord));
+      return;
+    }
+
+    writeJson(response, 404, {
+      ok: false,
+      message: "Route not found."
     });
-    writeJson(response, 200, snapshot);
-    return;
+  } catch (error) {
+    writeJson(response, 500, {
+      ok: false,
+      message: error instanceof Error ? error.message : "Unknown relay error."
+    });
   }
-
-  const agentOutputMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)\/output$/);
-  if (request.method === "POST" && agentOutputMatch) {
-    const authorization = authorizeAgent(request, relayConfig);
-    if (!authorization.ok) {
-      writeJson(response, authorization.statusCode, {
-        ok: false,
-        message: authorization.message
-      });
-      return;
-    }
-
-    const sessionRecord = sessions.get(agentOutputMatch[1]);
-    if (!sessionRecord) {
-      writeJson(response, 404, {
-        ok: false,
-        message: "Session not found."
-      });
-      return;
-    }
-
-    collectBody(request)
-      .then((body) => {
-        const parsed = parseOutputRequest(body);
-        if (!parsed.ok) {
-          writeJson(response, 400, {
-            ok: false,
-            message: parsed.message
-          });
-          return;
-        }
-
-        appendOutput(sessionRecord, parsed.payload);
-        broadcastSnapshot(sessionRecord);
-        writeJson(response, 200, buildTerminalSnapshot(sessionRecord));
-      })
-      .catch((error: unknown) => {
-        writeJson(response, 500, {
-          ok: false,
-          message: error instanceof Error ? error.message : "Unknown relay error."
-        });
-      });
-    return;
-  }
-
-  writeJson(response, 404, {
-    ok: false,
-    message: "Route not found."
-  });
 });
 
 server.listen(port, () => {
@@ -406,7 +416,7 @@ function writeJson(response: http.ServerResponse, statusCode: number, payload: u
 function writeCorsHeaders(response: http.ServerResponse): void {
   response.setHeader("access-control-allow-origin", "*");
   response.setHeader("access-control-allow-methods", "GET,POST,PUT,OPTIONS");
-  response.setHeader("access-control-allow-headers", "content-type,x-remote-console-agent-key,x-remote-console-viewer-key");
+  response.setHeader("access-control-allow-headers", "authorization,content-type,x-remote-console-agent-key,x-remote-console-viewer-key");
 }
 
 function collectBody(request: http.IncomingMessage): Promise<string> {
