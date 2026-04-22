@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createEnvelope, createTerminalLine, isTransportEnvelope } from "./index.js";
+import { createAgentCommand, createEnvelope, createTerminalLine, isTransportEnvelope } from "./index.js";
 
 run("createEnvelope returns a stable transport envelope", () => {
   const now = new Date("2026-04-22T10:00:00.000Z");
@@ -40,7 +40,18 @@ run("createTerminalLine returns a stable terminal line", () => {
   });
 });
 
-console.log("3 protocol test(s) passed.");
+run("createAgentCommand returns a stable queued command", () => {
+  const now = new Date("2026-04-22T10:06:00.000Z");
+  const command = createAgentCommand("cmd-1", "pwd", now);
+
+  assert.deepEqual(command, {
+    id: "cmd-1",
+    command: "pwd",
+    createdAt: "2026-04-22T10:06:00.000Z"
+  });
+});
+
+console.log("4 protocol test(s) passed.");
 
 function run(name: string, fn: () => void): void {
   try {

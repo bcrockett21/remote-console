@@ -7,7 +7,8 @@ const input = document.getElementById("command-input");
 
 const state = {
   relayUrl: relayInput instanceof HTMLInputElement ? relayInput.value.trim() : "http://localhost:4040",
-  sessionId: "local-machine"
+  sessionId: "local-machine",
+  stream: null
 };
 
 if (
@@ -20,12 +21,15 @@ if (
 ) {
   relayInput.addEventListener("change", async () => {
     state.relayUrl = relayInput.value.trim();
+    closeStream();
     await loadSessions();
   });
 
   sessionSelect.addEventListener("change", async () => {
     state.sessionId = sessionSelect.value;
+    closeStream();
     await loadTerminal();
+    openStream();
   });
 
   refreshButton.addEventListener("click", async () => {
@@ -55,7 +59,6 @@ if (
       });
 
       input.value = "";
-      await loadTerminal();
     } catch (error) {
       renderLines([
         {
@@ -99,6 +102,7 @@ async function loadSessions() {
       sessionSelect.value = state.sessionId;
       setStatus(`Session: ${state.sessionId}`);
       await loadTerminal();
+      openStream();
       return;
     }
 
@@ -132,8 +136,7 @@ async function loadTerminal() {
     }
 
     const snapshot = await response.json();
-    renderLines(snapshot?.payload?.lines ?? []);
-    setStatus(`Session: ${snapshot?.payload?.session?.id ?? state.sessionId}`);
+    applySnapshot(snapshot);
   } catch (error) {
     renderLines([
       {
@@ -142,6 +145,42 @@ async function loadTerminal() {
       }
     ]);
     setStatus("Session: error");
+  }
+}
+
+function openStream() {
+  if (!state.sessionId || typeof EventSource === "undefined") {
+    return;
+  }
+
+  closeStream();
+
+  const stream = new EventSource(`${state.relayUrl}/api/sessions/${state.sessionId}/stream`);
+  state.stream = stream;
+
+  stream.addEventListener("snapshot", (event) => {
+    const message = JSON.parse(event.data);
+    applySnapshot(message);
+  });
+
+  stream.onerror = () => {
+    setStatus(`Session: ${state.sessionId} (stream reconnecting)`);
+  };
+}
+
+function closeStream() {
+  if (state.stream instanceof EventSource) {
+    state.stream.close();
+  }
+
+  state.stream = null;
+}
+
+function applySnapshot(snapshot) {
+  renderLines(snapshot?.payload?.lines ?? []);
+  const session = snapshot?.payload?.session;
+  if (session) {
+    setStatus(`Session: ${session.id} (${session.state})`);
   }
 }
 
@@ -182,3 +221,7 @@ function promptForStream(stream) {
 function setStatus(text) {
   sessionStatus.textContent = text;
 }
+
+window.addEventListener("beforeunload", () => {
+  closeStream();
+});

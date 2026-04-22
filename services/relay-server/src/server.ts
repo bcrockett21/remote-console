@@ -1,28 +1,17 @@
 import http from "node:http";
 import {
+  createAgentCommand,
   createEnvelope,
   createTerminalLine,
+  type AgentOutputPayload,
   type SessionDescriptor,
   type TerminalLine
 } from "@remote-console/protocol";
 
 const port = Number.parseInt(process.env.PORT ?? "4040", 10);
-const initialTimestamp = new Date().toISOString();
-const sessions = new Map<string, SessionRecord>([
-  ["local-machine", {
-    session: {
-      id: "local-machine",
-      machineName: "Development Machine",
-      state: "connected",
-      updatedAt: initialTimestamp
-    },
-    lines: [
-      createTerminalLine("line-1", "system", "relay-server connected to local-machine", new Date(initialTimestamp)),
-      createTerminalLine("line-2", "stdout", "windows-agent stub ready", new Date(initialTimestamp)),
-      createTerminalLine("line-3", "stdout", "type a command in the Teams terminal preview to append activity", new Date(initialTimestamp))
-    ]
-  }]
-]);
+const sessions = new Map<string, SessionRecord>();
+
+seedSession("local-machine", "Development Machine");
 
 const server = http.createServer((request, response) => {
   if (!request.url) {
@@ -38,7 +27,7 @@ const server = http.createServer((request, response) => {
     return;
   }
 
-  if (url.pathname === "/health") {
+  if (request.method === "GET" && url.pathname === "/health") {
     writeJson(response, 200, {
       ok: true,
       service: "relay-server"
@@ -54,6 +43,21 @@ const server = http.createServer((request, response) => {
     return;
   }
 
+  const streamMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/stream$/);
+  if (request.method === "GET" && streamMatch) {
+    const sessionRecord = sessions.get(streamMatch[1]);
+    if (!sessionRecord) {
+      writeJson(response, 404, {
+        ok: false,
+        message: "Session not found."
+      });
+      return;
+    }
+
+    openStream(response, sessionRecord);
+    return;
+  }
+
   const terminalMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/terminal$/);
   if (request.method === "GET" && terminalMatch) {
     const sessionRecord = sessions.get(terminalMatch[1]);
@@ -65,12 +69,7 @@ const server = http.createServer((request, response) => {
       return;
     }
 
-    const snapshot = createEnvelope("terminal.snapshot", sessionRecord.session.id, {
-      session: sessionRecord.session,
-      lines: sessionRecord.lines
-    });
-
-    writeJson(response, 200, snapshot);
+    writeJson(response, 200, buildTerminalSnapshot(sessionRecord));
     return;
   }
 
@@ -95,12 +94,90 @@ const server = http.createServer((request, response) => {
           return;
         }
 
-        appendInput(sessionRecord, parsed.data);
-        const snapshot = createEnvelope("terminal.snapshot", sessionRecord.session.id, {
-          session: sessionRecord.session,
-          lines: sessionRecord.lines
+        enqueueCommand(sessionRecord, parsed.data);
+        broadcastSnapshot(sessionRecord);
+        writeJson(response, 200, buildTerminalSnapshot(sessionRecord));
+      })
+      .catch((error: unknown) => {
+        writeJson(response, 500, {
+          ok: false,
+          message: error instanceof Error ? error.message : "Unknown relay error."
         });
-        writeJson(response, 200, snapshot);
+      });
+    return;
+  }
+
+  const agentRegisterMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)$/);
+  if ((request.method === "PUT" || request.method === "POST") && agentRegisterMatch) {
+    collectBody(request)
+      .then((body) => {
+        const parsed = parseRegistrationRequest(body);
+        if (!parsed.ok) {
+          writeJson(response, 400, {
+            ok: false,
+            message: parsed.message
+          });
+          return;
+        }
+
+        const sessionRecord = ensureSession(agentRegisterMatch[1], parsed.machineName);
+        appendSystemLine(sessionRecord, `agent registered from ${parsed.machineName}`);
+        broadcastSnapshot(sessionRecord);
+        writeJson(response, 200, buildTerminalSnapshot(sessionRecord));
+      })
+      .catch((error: unknown) => {
+        writeJson(response, 500, {
+          ok: false,
+          message: error instanceof Error ? error.message : "Unknown relay error."
+        });
+      });
+    return;
+  }
+
+  const agentCommandsMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)\/commands$/);
+  if (request.method === "GET" && agentCommandsMatch) {
+    const sessionRecord = sessions.get(agentCommandsMatch[1]);
+    if (!sessionRecord) {
+      writeJson(response, 404, {
+        ok: false,
+        message: "Session not found."
+      });
+      return;
+    }
+
+    const snapshot = createEnvelope("agent.commands", sessionRecord.session.id, {
+      session: sessionRecord.session,
+      pendingCommands: sessionRecord.pendingCommands
+    });
+    writeJson(response, 200, snapshot);
+    return;
+  }
+
+  const agentOutputMatch = url.pathname.match(/^\/api\/agent\/sessions\/([^/]+)\/output$/);
+  if (request.method === "POST" && agentOutputMatch) {
+    const sessionRecord = sessions.get(agentOutputMatch[1]);
+    if (!sessionRecord) {
+      writeJson(response, 404, {
+        ok: false,
+        message: "Session not found."
+      });
+      return;
+    }
+
+    collectBody(request)
+      .then((body) => {
+        const parsed = parseOutputRequest(body);
+        if (!parsed.ok) {
+          writeJson(response, 400, {
+            ok: false,
+            message: parsed.message
+          });
+          return;
+        }
+
+        appendOutput(sessionRecord, parsed.payload);
+        broadcastSnapshot(sessionRecord);
+        writeJson(response, 200, buildTerminalSnapshot(sessionRecord));
       })
       .catch((error: unknown) => {
         writeJson(response, 500, {
@@ -121,6 +198,134 @@ server.listen(port, () => {
   console.log(`relay-server listening on http://localhost:${port}`);
 });
 
+function seedSession(id: string, machineName: string): void {
+  const sessionRecord = ensureSession(id, machineName);
+  if (sessionRecord.lines.length === 0) {
+    const now = new Date();
+    sessionRecord.lines.push(
+      createTerminalLine("line-1", "system", `relay-server connected to ${id}`, now),
+      createTerminalLine("line-2", "stdout", "windows-agent can register and stream output here", now),
+      createTerminalLine("line-3", "stdout", "type a command in the Teams terminal to queue work for the agent", now)
+    );
+  }
+}
+
+function ensureSession(id: string, machineName: string): SessionRecord {
+  const existing = sessions.get(id);
+  if (existing) {
+    existing.session = {
+      ...existing.session,
+      machineName,
+      state: "connected",
+      updatedAt: new Date().toISOString()
+    };
+    return existing;
+  }
+
+  const now = new Date().toISOString();
+  const sessionRecord: SessionRecord = {
+    session: {
+      id,
+      machineName,
+      state: "connected",
+      updatedAt: now
+    },
+    lines: [],
+    pendingCommands: [],
+    streams: new Set()
+  };
+
+  sessions.set(id, sessionRecord);
+  return sessionRecord;
+}
+
+function enqueueCommand(sessionRecord: SessionRecord, input: string): void {
+  const now = new Date();
+  const command = input.trim();
+  const commandId = `cmd-${sessionRecord.pendingCommands.length + Date.now()}`;
+
+  sessionRecord.pendingCommands.push(createAgentCommand(commandId, command, now));
+  sessionRecord.lines.push(
+    createTerminalLine(`line-${sessionRecord.lines.length + 1}`, "input", command, now),
+    createTerminalLine(`line-${sessionRecord.lines.length + 2}`, "system", `queued for agent as ${commandId}`, now)
+  );
+  touchSession(sessionRecord, now);
+}
+
+function appendOutput(sessionRecord: SessionRecord, payload: AgentOutputPayload): void {
+  const now = new Date();
+
+  if (payload.commandId) {
+    sessionRecord.pendingCommands = sessionRecord.pendingCommands.filter(command => command.id !== payload.commandId);
+    sessionRecord.lines.push(
+      createTerminalLine(
+        `line-${sessionRecord.lines.length + 1}`,
+        "system",
+        `agent completed ${payload.commandId}`,
+        now)
+    );
+  }
+
+  for (const line of payload.lines) {
+    sessionRecord.lines.push(
+      createTerminalLine(`line-${sessionRecord.lines.length + 1}`, line.stream, line.text, now)
+    );
+  }
+
+  touchSession(sessionRecord, now);
+}
+
+function appendSystemLine(sessionRecord: SessionRecord, text: string): void {
+  const now = new Date();
+  sessionRecord.lines.push(
+    createTerminalLine(`line-${sessionRecord.lines.length + 1}`, "system", text, now)
+  );
+  touchSession(sessionRecord, now);
+}
+
+function touchSession(sessionRecord: SessionRecord, now: Date): void {
+  sessionRecord.session = {
+    ...sessionRecord.session,
+    updatedAt: now.toISOString()
+  };
+}
+
+function buildTerminalSnapshot(sessionRecord: SessionRecord) {
+  return createEnvelope("terminal.snapshot", sessionRecord.session.id, {
+    session: sessionRecord.session,
+    lines: sessionRecord.lines
+  });
+}
+
+function openStream(response: http.ServerResponse, sessionRecord: SessionRecord): void {
+  response.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive"
+  });
+
+  sessionRecord.streams.add(response);
+  response.write(`event: snapshot\n`);
+  response.write(`data: ${JSON.stringify(buildTerminalSnapshot(sessionRecord))}\n\n`);
+
+  const heartbeat = setInterval(() => {
+    response.write(": heartbeat\n\n");
+  }, 15000);
+
+  response.on("close", () => {
+    clearInterval(heartbeat);
+    sessionRecord.streams.delete(response);
+  });
+}
+
+function broadcastSnapshot(sessionRecord: SessionRecord): void {
+  const payload = JSON.stringify(buildTerminalSnapshot(sessionRecord));
+  for (const stream of sessionRecord.streams) {
+    stream.write(`event: snapshot\n`);
+    stream.write(`data: ${payload}\n\n`);
+  }
+}
+
 function writeJson(response: http.ServerResponse, statusCode: number, payload: unknown): void {
   response.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8"
@@ -130,7 +335,7 @@ function writeJson(response: http.ServerResponse, statusCode: number, payload: u
 
 function writeCorsHeaders(response: http.ServerResponse): void {
   response.setHeader("access-control-allow-origin", "*");
-  response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+  response.setHeader("access-control-allow-methods", "GET,POST,PUT,OPTIONS");
   response.setHeader("access-control-allow-headers", "content-type");
 }
 
@@ -172,46 +377,71 @@ function parseInputRequest(body: string): { ok: true; data: string } | { ok: fal
   }
 }
 
-function appendInput(sessionRecord: SessionRecord, input: string): void {
-  const now = new Date();
-  const command = input.trim();
-  const sequence = sessionRecord.lines.length + 1;
+function parseRegistrationRequest(body: string): { ok: true; machineName: string } | { ok: false; message: string } {
+  try {
+    const parsed = JSON.parse(body) as { machineName?: unknown };
+    if (typeof parsed.machineName !== "string" || parsed.machineName.trim().length === 0) {
+      return {
+        ok: false,
+        message: "Registration payload must include a non-empty string field named 'machineName'."
+      };
+    }
 
-  sessionRecord.lines.push(
-    createTerminalLine(`line-${sequence}`, "input", command, now),
-    createTerminalLine(`line-${sequence + 1}`, "system", `relay accepted command: ${command}`, now),
-    createTerminalLine(`line-${sequence + 2}`, "stdout", simulateCommandOutput(command), now)
-  );
-
-  sessionRecord.session = {
-    ...sessionRecord.session,
-    updatedAt: now.toISOString()
-  };
+    return {
+      ok: true,
+      machineName: parsed.machineName.trim()
+    };
+  } catch {
+    return {
+      ok: false,
+      message: "Registration payload must be valid JSON."
+    };
+  }
 }
 
-function simulateCommandOutput(command: string): string {
-  const normalized = command.toLowerCase();
+function parseOutputRequest(body: string): { ok: true; payload: AgentOutputPayload } | { ok: false; message: string } {
+  try {
+    const parsed = JSON.parse(body) as Partial<AgentOutputPayload>;
+    if (!Array.isArray(parsed.lines) || parsed.lines.length === 0) {
+      return {
+        ok: false,
+        message: "Output payload must include a non-empty array field named 'lines'."
+      };
+    }
 
-  if (normalized === "help") {
-    return "Available preview commands: help, status, clear, attach";
+    const lines = parsed.lines
+      .filter((line): line is { stream: "stdout" | "stderr" | "system"; text: string } =>
+        typeof line === "object"
+        && line !== null
+        && (line.stream === "stdout" || line.stream === "stderr" || line.stream === "system")
+        && typeof line.text === "string"
+        && line.text.trim().length > 0);
+
+    if (lines.length === 0) {
+      return {
+        ok: false,
+        message: "Output lines must contain at least one valid stream/text entry."
+      };
+    }
+
+    return {
+      ok: true,
+      payload: {
+        commandId: typeof parsed.commandId === "string" ? parsed.commandId : undefined,
+        lines
+      }
+    };
+  } catch {
+    return {
+      ok: false,
+      message: "Output payload must be valid JSON."
+    };
   }
-
-  if (normalized === "status") {
-    return "relay-server preview is online; PTY transport is the next implementation step.";
-  }
-
-  if (normalized === "attach") {
-    return "Attach preview: the future Windows agent will bind this session to a live Codex terminal.";
-  }
-
-  if (normalized === "clear") {
-    return "Clear preview acknowledged. Client-side clearing is not wired yet.";
-  }
-
-  return `preview executed: ${command}`;
 }
 
 type SessionRecord = {
   session: SessionDescriptor;
   lines: TerminalLine[];
+  pendingCommands: ReturnType<typeof createAgentCommand>[];
+  streams: Set<http.ServerResponse>;
 };

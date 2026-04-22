@@ -3,13 +3,13 @@
 ## Initial Vertical Slice
 
 - `packages/protocol` defines the shared message envelope and session snapshot types.
-- `services/relay-server` exposes a minimal HTTP API for health, session discovery, terminal snapshots, and in-memory command submission.
-- `agents/windows-agent` is the first local-agent stub that will eventually bridge to Codex and the Windows shell.
-- `apps/teams-tab` is a terminal-style shell that currently talks to the relay over HTTP and renders a live session preview.
+- `services/relay-server` exposes a minimal HTTP API for health, session discovery, terminal snapshots, command queueing, agent output ingestion, and server-sent event streaming.
+- `agents/windows-agent` is now an active polling agent stub that registers with the relay and turns queued commands into terminal output.
+- `apps/teams-tab` is a terminal-style shell that talks to the relay over HTTP and streams terminal updates over SSE.
 
 ## Next Steps
 
-1. Replace the polling terminal preview with streaming transport between the relay and the local Windows agent.
-2. Attach the Windows agent to a PTY-backed shell session.
-3. Add Teams authentication and session brokering.
-4. Replace the static browser tab shell with a real Teams app package and tab registration flow.
+1. Replace the preview agent logic with a PTY-backed Windows shell and Codex bridge.
+2. Add authenticated session brokering between Teams users and machines.
+3. Replace plain browser assets with a real Teams app package and tab registration flow.
+4. Add durable persistence for session and machine metadata instead of in-memory relay state.

@@ -39,10 +39,34 @@ export type TerminalSnapshotPayload = {
   lines: TerminalLine[];
 };
 
+export type AgentRegistrationPayload = {
+  machineName: string;
+};
+
+export type AgentCommand = {
+  id: string;
+  command: string;
+  createdAt: string;
+};
+
+export type AgentCommandSnapshotPayload = {
+  session: SessionDescriptor;
+  pendingCommands: AgentCommand[];
+};
+
+export type AgentOutputPayload = {
+  commandId?: string;
+  lines: Array<{
+    stream: "stdout" | "stderr" | "system";
+    text: string;
+  }>;
+};
+
 export type TerminalInputEvent = TransportEnvelope<"terminal.input", TerminalInputPayload>;
 export type TerminalOutputEvent = TransportEnvelope<"terminal.output", TerminalOutputPayload>;
 export type SessionSnapshotEvent = TransportEnvelope<"session.snapshot", SessionSnapshotPayload>;
 export type TerminalSnapshotEvent = TransportEnvelope<"terminal.snapshot", TerminalSnapshotPayload>;
+export type AgentCommandSnapshotEvent = TransportEnvelope<"agent.commands", AgentCommandSnapshotPayload>;
 
 export function createEnvelope<TType extends string, TPayload>(
   type: TType,
@@ -80,6 +104,18 @@ export function createTerminalLine(
     id,
     stream,
     text,
+    createdAt: now.toISOString()
+  };
+}
+
+export function createAgentCommand(
+  id: string,
+  command: string,
+  now: Date = new Date())
+: AgentCommand {
+  return {
+    id,
+    command,
     createdAt: now.toISOString()
   };
 }
