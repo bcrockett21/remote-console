@@ -1,0 +1,19 @@
+{
+  "name": "remote-console",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "services/*",
+    "agents/*"
+  ],
+  "scripts": {
+    "build": "tsc -b packages/protocol services/relay-server agents/windows-agent",
+    "test": "npm run build && node packages/protocol/dist/test-runner.js",
+    "lint": "tsc -b --pretty false packages/protocol services/relay-server agents/windows-agent"
+  },
+  "devDependencies": {
+    "@types/node": "^24.8.1",
+    "typescript": "^5.9.3"
+  }
+}

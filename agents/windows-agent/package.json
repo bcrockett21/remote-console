@@ -1,0 +1,14 @@
+{
+  "name": "@remote-console/windows-agent",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node ./dist/index.js"
+  },
+  "dependencies": {
+    "@remote-console/protocol": "0.1.0"
+  }
+}

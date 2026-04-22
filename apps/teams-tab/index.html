@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Remote Console</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="shell__chrome">
+        <div>
+          <p class="shell__eyebrow">Teams Personal Tab</p>
+          <h1>Remote Console</h1>
+          <p class="shell__subtitle">Terminal-first remote access for Codex sessions on desktop and iPhone.</p>
+        </div>
+        <span class="shell__status">Session: local-machine</span>
+      </section>
+
+      <section class="terminal">
+        <div class="terminal__line"><span class="terminal__prompt">codex@remote</span> connecting to relay-server...</div>
+        <div class="terminal__line"><span class="terminal__prompt">relay</span> /api/sessions returned 1 session</div>
+        <div class="terminal__line"><span class="terminal__prompt">agent</span> windows-agent stub ready</div>
+        <label class="terminal__input-row">
+          <span class="terminal__prompt">></span>
+          <input id="command-input" class="terminal__input" type="text" autocomplete="off" placeholder="Typed commands will go here in the live Teams terminal." />
+        </label>
+      </section>
+    </main>
+    <script src="./main.js"></script>
+  </body>
+</html>

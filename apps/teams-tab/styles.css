@@ -1,0 +1,118 @@
+body {
+  margin: 0;
+  font-family: "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at top, rgba(34, 160, 167, 0.15), transparent 30%),
+    linear-gradient(180deg, #0f1319 0%, #080b0f 100%);
+  color: #f3efe6;
+}
+
+.shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: 32px 20px;
+  box-sizing: border-box;
+}
+
+.shell__chrome {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.shell__eyebrow {
+  margin: 0 0 8px;
+  color: #d5c5aa;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.shell__chrome h1 {
+  margin: 0;
+  font-size: 40px;
+}
+
+.shell__subtitle {
+  max-width: 640px;
+  margin: 12px 0 0;
+  color: #b8b0a3;
+}
+
+.shell__status {
+  padding: 10px 14px;
+  border: 1px solid rgba(238, 219, 181, 0.3);
+  border-radius: 999px;
+  color: #e7d4b0;
+  background: rgba(255, 255, 255, 0.04);
+  white-space: nowrap;
+}
+
+.terminal {
+  background: rgba(6, 9, 13, 0.84);
+  border: 1px solid rgba(238, 219, 181, 0.18);
+  border-radius: 24px;
+  padding: 22px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.terminal__line,
+.terminal__input-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #dfe7da;
+}
+
+.terminal__prompt {
+  color: #73d8cf;
+  min-width: 120px;
+}
+
+.terminal__input-row {
+  margin-top: 18px;
+}
+
+.terminal__input {
+  flex: 1;
+  border: none;
+  outline: none;
+  color: #f3efe6;
+  font: inherit;
+  background: transparent;
+}
+
+.terminal__input::placeholder {
+  color: #7e8a84;
+}
+
+@media (max-width: 720px) {
+  .shell {
+    padding: 20px 14px;
+  }
+
+  .shell__chrome {
+    flex-direction: column;
+  }
+
+  .shell__chrome h1 {
+    font-size: 32px;
+  }
+
+  .terminal__line,
+  .terminal__input-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .terminal__prompt {
+    min-width: 0;
+  }
+}
