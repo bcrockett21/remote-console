@@ -1,15 +1,29 @@
 # Remote Console
 
-Remote Console is a starter repository for a Microsoft Teams app that feels as close as possible to having a live terminal inside Teams on desktop and iOS.
+Remote Console is a Microsoft Teams-first remote terminal project for viewing and interacting with a Codex-backed shell from desktop and iOS.
 
-## Initial Structure
+## Repository Layout
 
-- `apps/teams-tab/` Teams personal tab frontend
-- `services/relay-server/` authenticated relay between Teams and the local machine
-- `agents/windows-agent/` local Windows agent that bridges to Codex and the shell
-- `packages/protocol/` shared session and streaming protocol contracts
+- `apps/teams-tab/` Teams personal tab frontend shell
+- `services/relay-server/` authenticated relay service
+- `agents/windows-agent/` local Windows machine agent
+- `packages/protocol/` shared session and message protocol
 - `docs/` product and architecture notes
 - `infra/` deployment and environment setup
 - `scripts/` developer automation
 
-Empty directories are tracked with `.gitkeep` placeholders.
+## Commands
+
+- `npm install`
+- `npm run build`
+- `npm test`
+
+## Current Scope
+
+This initial build slice provides:
+
+- a typed shared protocol package
+- a minimal relay server with health, session, terminal snapshot, and command submission endpoints
+- a Windows agent CLI stub
+- a Teams tab shell that loads session state from the relay and appends typed commands into a terminal view
+- root build and test commands

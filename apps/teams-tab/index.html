@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Remote Console</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="shell__chrome">
+        <div>
+          <p class="shell__eyebrow">Teams Personal Tab</p>
+          <h1>Remote Console</h1>
+          <p class="shell__subtitle">Terminal-first remote access for Codex sessions on desktop and iPhone.</p>
+        </div>
+        <span id="session-status" class="shell__status">Session: connecting...</span>
+      </section>
+
+      <section class="shell__toolbar">
+        <label class="shell__field">
+          <span>Relay URL</span>
+          <input id="relay-url" type="text" value="http://localhost:4040" />
+        </label>
+        <label class="shell__field">
+          <span>Session</span>
+          <select id="session-select"></select>
+        </label>
+        <button id="refresh-button" class="shell__button" type="button">Refresh</button>
+      </section>
+
+      <section class="terminal">
+        <div id="terminal-lines" class="terminal__lines"></div>
+        <label class="terminal__input-row">
+          <span class="terminal__prompt">></span>
+          <input id="command-input" class="terminal__input" type="text" autocomplete="off" placeholder="Type a command and press Enter." />
+        </label>
+      </section>
+    </main>
+    <script src="./main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,178 @@
+body {
+  margin: 0;
+  font-family: "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at top, rgba(34, 160, 167, 0.15), transparent 30%),
+    linear-gradient(180deg, #0f1319 0%, #080b0f 100%);
+  color: #f3efe6;
+}
+
+.shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: 32px 20px;
+  box-sizing: border-box;
+}
+
+.shell__chrome {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.shell__eyebrow {
+  margin: 0 0 8px;
+  color: #d5c5aa;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.shell__chrome h1 {
+  margin: 0;
+  font-size: 40px;
+}
+
+.shell__subtitle {
+  max-width: 640px;
+  margin: 12px 0 0;
+  color: #b8b0a3;
+}
+
+.shell__status {
+  padding: 10px 14px;
+  border: 1px solid rgba(238, 219, 181, 0.3);
+  border-radius: 999px;
+  color: #e7d4b0;
+  background: rgba(255, 255, 255, 0.04);
+  white-space: nowrap;
+}
+
+.shell__toolbar {
+  display: flex;
+  gap: 14px;
+  align-items: end;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.shell__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+  color: #d5c5aa;
+  font-size: 13px;
+}
+
+.shell__field input,
+.shell__field select {
+  border: 1px solid rgba(238, 219, 181, 0.18);
+  border-radius: 14px;
+  background: rgba(6, 9, 13, 0.7);
+  color: #f3efe6;
+  padding: 12px 14px;
+  font: inherit;
+}
+
+.shell__button {
+  height: 46px;
+  border: 1px solid rgba(115, 216, 207, 0.35);
+  border-radius: 14px;
+  background: rgba(115, 216, 207, 0.14);
+  color: #f3efe6;
+  padding: 0 18px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.terminal {
+  background: rgba(6, 9, 13, 0.84);
+  border: 1px solid rgba(238, 219, 181, 0.18);
+  border-radius: 24px;
+  padding: 22px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.terminal__lines {
+  min-height: 320px;
+  max-height: 58vh;
+  overflow: auto;
+}
+
+.terminal__line,
+.terminal__input-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #dfe7da;
+}
+
+.terminal__line--stderr {
+  color: #ffb0b0;
+}
+
+.terminal__line--input {
+  color: #f0e6c7;
+}
+
+.terminal__line--system {
+  color: #9cd3e7;
+}
+
+.terminal__prompt {
+  color: #73d8cf;
+  min-width: 120px;
+}
+
+.terminal__input-row {
+  margin-top: 18px;
+}
+
+.terminal__input {
+  flex: 1;
+  border: none;
+  outline: none;
+  color: #f3efe6;
+  font: inherit;
+  background: transparent;
+}
+
+.terminal__input::placeholder {
+  color: #7e8a84;
+}
+
+@media (max-width: 720px) {
+  .shell {
+    padding: 20px 14px;
+  }
+
+  .shell__chrome {
+    flex-direction: column;
+  }
+
+  .shell__toolbar {
+    align-items: stretch;
+  }
+
+  .shell__chrome h1 {
+    font-size: 32px;
+  }
+
+  .terminal__line,
+  .terminal__input-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .terminal__prompt {
+    min-width: 0;
+  }
+}
