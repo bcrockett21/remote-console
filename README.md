@@ -19,6 +19,7 @@ Remote Console is a Microsoft Teams-first remote terminal project for viewing an
 - `npm run start:relay`
 - `npm run start:agent`
 - `npm run start:tab`
+- `npm run build:teams-package`
 - `npm test`
 
 ## Current Scope

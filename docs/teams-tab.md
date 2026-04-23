@@ -10,6 +10,7 @@ The current Teams tab is a static web client served from `apps/teams-tab`.
 - `npm run start:relay`
 - `npm run start:agent`
 - `npm run start:tab`
+- `npm run build:teams-package`
 
 The tab host defaults to `http://localhost:53000`.
 
@@ -84,6 +85,7 @@ The repository includes a Teams app manifest template at:
 Build a concrete manifest with:
 
 - `npm run build:teams-manifest`
+- `npm run build:teams-package`
 
 Environment variables:
 
@@ -98,11 +100,38 @@ The rendered manifest is written to:
 
 - `apps/teams-tab/appPackage/dist/manifest.json`
 
+The installable Teams app package is written to:
+
+- `apps/teams-tab/appPackage/dist/teams-app-package.zip`
+
+## Teams Test Loop
+
+Use this flow to test the app inside Microsoft Teams:
+
+1. Start the local services you want to test.
+   Run `npm run start:relay`, `npm run start:agent`, and `npm run start:tab`.
+2. Expose the tab host over public HTTPS.
+   The Teams manifest `contentUrl` must be reachable from Teams, so point a public HTTPS URL at `http://localhost:53000`.
+3. Render the manifest for that HTTPS URL.
+   Set `APP_BASE_URL` to the public HTTPS base URL and set `MICROSOFT_APP_ID` to the Entra app registration used by the Teams app.
+4. Build the uploadable Teams package.
+   Run `npm run build:teams-package`.
+5. Upload the ZIP package in Teams.
+   Use `apps/teams-tab/appPackage/dist/teams-app-package.zip` when adding a custom app in Teams.
+
+Example PowerShell session:
+
+```powershell
+$env:APP_BASE_URL = "https://your-public-teams-url.example.com"
+$env:MICROSOFT_APP_ID = "00000000-0000-0000-0000-000000000000"
+npm run build:teams-package
+```
+
 ## Current State
 
 - the manifest is a development template, not a production package
 - the tab client can initialize the Teams JavaScript SDK when hosted inside Teams
-- the local static host is plain HTTP; a real Teams install will need an HTTPS host such as a dev tunnel or deployed environment
+- the local static host is plain HTTP; Teams testing still requires a public HTTPS host such as a dev tunnel or deployed environment
 - the relay now exposes an auth capability document at `/api/config`
 - Entra-backed Teams identity now works for viewer requests when the tab is opened inside Teams and the relay is configured with the required Entra settings
 - the relay can now optionally scope Entra viewer access down to specific sessions with `SESSION_VIEWER_BINDINGS`
