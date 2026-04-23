@@ -59,8 +59,21 @@ Optional relay environment variables:
   Additional accepted audience for the access token. Use this when your app registration exposes a custom Application ID URI.
 - `ENTRA_OPENID_CONFIGURATION_URL`
   Override for OpenID metadata discovery. This is mainly useful for tests.
+- `RELAY_AUTH_POLICY_FILE`
+  Path to a JSON authorization policy file. When set, this replaces the env-based `AUTHORIZED_VIEWER_OBJECT_IDS` and `SESSION_VIEWER_BINDINGS` inputs.
 - `SESSION_VIEWER_BINDINGS`
-  Semicolon-separated session-to-viewer map in the format `session-id:viewer-a|viewer-b;other-session:viewer-b`. When set, the relay only returns sessions bound to the current viewer and blocks direct access to unbound sessions.
+  Semicolon-separated session-to-viewer map in the format `session-id:viewer-a|viewer-b;other-session:viewer-b`. This remains as a fallback when `RELAY_AUTH_POLICY_FILE` is not set.
+
+Authorization policy file shape:
+
+- `allowedViewerObjectIds`
+  Array of Entra object IDs allowed to use the relay.
+- `sessionViewerBindings`
+  Object keyed by session ID, with each value set to an array of allowed viewer object IDs.
+
+Example file:
+
+- `infra/authorization-policy.example.json`
 
 ## Teams App Package
 

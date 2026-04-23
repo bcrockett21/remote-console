@@ -1,5 +1,7 @@
 import { createPublicKey, verify as verifySignature } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { IncomingMessage } from "node:http";
+import path from "node:path";
 import type { SessionDescriptor } from "@remote-console/protocol";
 import { isRelayAuthMode, type RelayAuthMode, type RelayAuthorizationMode, type RelayConfigPayload } from "@remote-console/protocol";
 
@@ -82,6 +84,11 @@ type CachedSigningKeys = {
   value: SigningKey[];
 };
 
+type AuthorizationPolicyFile = {
+  allowedViewerObjectIds?: unknown;
+  sessionViewerBindings?: unknown;
+};
+
 export type AuthorizationResult =
   | { ok: true; viewer?: ViewerIdentity }
   | { ok: false; statusCode: number; message: string };
@@ -103,8 +110,9 @@ export function loadRelayRuntimeConfig(env: NodeJS.ProcessEnv): RelayRuntimeConf
     throw new Error(`Unsupported RELAY_AUTH_MODE '${modeCandidate}'. Expected 'shared-key' or 'entra-id'.`);
   }
 
-  const allowedViewerIds = splitList(env.AUTHORIZED_VIEWER_OBJECT_IDS);
-  const sessionViewerBindings = parseSessionViewerBindings(env.SESSION_VIEWER_BINDINGS);
+  const authorizationPolicy = loadAuthorizationPolicy(env);
+  const allowedViewerIds = authorizationPolicy.allowedViewerIds;
+  const sessionViewerBindings = authorizationPolicy.sessionViewerBindings;
   const authorizationMode = resolveAuthorizationMode(modeCandidate, sessionViewerBindings);
 
   if (modeCandidate === "shared-key") {
@@ -532,6 +540,28 @@ function normalizeOptional(value: string | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+function loadAuthorizationPolicy(env: NodeJS.ProcessEnv): {
+  allowedViewerIds: string[];
+  sessionViewerBindings: Map<string, Set<string>>;
+} {
+  const filePath = normalizeOptional(env.RELAY_AUTH_POLICY_FILE);
+  if (!filePath) {
+    return {
+      allowedViewerIds: splitList(env.AUTHORIZED_VIEWER_OBJECT_IDS),
+      sessionViewerBindings: parseSessionViewerBindings(env.SESSION_VIEWER_BINDINGS)
+    };
+  }
+
+  const resolvedPath = path.resolve(filePath);
+  const raw = readFileSync(resolvedPath, "utf8");
+  const parsed = JSON.parse(raw) as AuthorizationPolicyFile;
+
+  return {
+    allowedViewerIds: parseAllowedViewerObjectIds(parsed.allowedViewerObjectIds),
+    sessionViewerBindings: parseSessionViewerBindingObject(parsed.sessionViewerBindings)
+  };
+}
+
 function resolveAuthorizationMode(
   authMode: RelayAuthMode,
   sessionViewerBindings: Map<string, Set<string>>)
@@ -549,6 +579,25 @@ function splitList(value: string | undefined): string[] {
   return value?.split(",")
     .map(item => item.trim())
     .filter(Boolean) ?? [];
+}
+
+function parseAllowedViewerObjectIds(value: unknown): string[] {
+  if (typeof value === "undefined") {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error("Authorization policy field 'allowedViewerObjectIds' must be an array of strings.");
+  }
+
+  return value
+    .map(item => {
+      if (typeof item !== "string" || item.trim().length === 0) {
+        throw new Error("Authorization policy field 'allowedViewerObjectIds' must contain non-empty strings.");
+      }
+
+      return item.trim();
+    });
 }
 
 function parseSessionViewerBindings(value: string | undefined): Map<string, Set<string>> {
@@ -580,6 +629,39 @@ function parseSessionViewerBindings(value: string | undefined): Map<string, Set<
     }
 
     bindings.set(normalizedSessionId, new Set(viewers));
+  }
+
+  return bindings;
+}
+
+function parseSessionViewerBindingObject(value: unknown): Map<string, Set<string>> {
+  const bindings = new Map<string, Set<string>>();
+  if (typeof value === "undefined") {
+    return bindings;
+  }
+
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("Authorization policy field 'sessionViewerBindings' must be an object keyed by session id.");
+  }
+
+  for (const [sessionId, viewerIds] of Object.entries(value)) {
+    if (typeof sessionId !== "string" || sessionId.trim().length === 0) {
+      throw new Error("Authorization policy 'sessionViewerBindings' contained an invalid session id.");
+    }
+
+    if (!Array.isArray(viewerIds) || viewerIds.length === 0) {
+      throw new Error(`Authorization policy binding for '${sessionId}' must be a non-empty array of viewer object ids.`);
+    }
+
+    const normalizedViewers = viewerIds.map(item => {
+      if (typeof item !== "string" || item.trim().length === 0) {
+        throw new Error(`Authorization policy binding for '${sessionId}' must contain non-empty viewer object ids.`);
+      }
+
+      return item.trim();
+    });
+
+    bindings.set(sessionId.trim(), new Set(normalizedViewers));
   }
 
   return bindings;

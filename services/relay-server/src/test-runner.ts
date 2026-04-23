@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { createSign, generateKeyPairSync } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { SessionDescriptor } from "@remote-console/protocol";
 import { authorizeAgent, authorizeViewer, canViewerAccessSession, filterAuthorizedSessions, loadRelayRuntimeConfig } from "./auth.js";
 
@@ -54,6 +57,41 @@ await run("loadRelayRuntimeConfig switches to session-scoped allowlisting when b
   assert.equal(config.authorization.mode, "entra-session-allowlist");
   assert.equal(config.publicConfig.authorization.sessionBindingCount, 2);
   assert.deepEqual(Array.from(config.authorization.sessionViewerBindings.get("local-machine") ?? []), ["viewer-1", "viewer-2"]);
+});
+
+await run("loadRelayRuntimeConfig reads durable authorization policy from a JSON file", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "remote-console-auth-"));
+  const policyPath = path.join(tempDir, "authorization-policy.json");
+
+  try {
+    await writeFile(policyPath, JSON.stringify({
+      allowedViewerObjectIds: ["viewer-a", "viewer-b"],
+      sessionViewerBindings: {
+        "local-machine": ["viewer-a"],
+        "lab-machine": ["viewer-b"]
+      }
+    }, null, 2), "utf8");
+
+    const config = loadRelayRuntimeConfig({
+      RELAY_AUTH_MODE: "entra-id",
+      ENTRA_TENANT_ID: tenantId,
+      MICROSOFT_APP_ID: clientId,
+      RELAY_AUTH_POLICY_FILE: policyPath,
+      AUTHORIZED_VIEWER_OBJECT_IDS: "ignored-viewer",
+      SESSION_VIEWER_BINDINGS: "ignored-session:ignored-viewer"
+    });
+
+    assert.deepEqual(config.authorization.allowedViewerIds, ["viewer-a", "viewer-b"]);
+    assert.equal(config.authorization.mode, "entra-session-allowlist");
+    assert.deepEqual(Array.from(config.authorization.sessionViewerBindings.get("local-machine") ?? []), ["viewer-a"]);
+    assert.equal(config.publicConfig.authorization.allowedViewerCount, 2);
+    assert.equal(config.publicConfig.authorization.sessionBindingCount, 2);
+  } finally {
+    await rm(tempDir, {
+      force: true,
+      recursive: true
+    });
+  }
 });
 
 await run("authorizeViewer accepts the configured shared key", async () => {
@@ -239,7 +277,7 @@ await run("authorizeAgent requires the configured agent key", () => {
   });
 });
 
-console.log("11 relay-server test(s) passed.");
+console.log("12 relay-server test(s) passed.");
 
 async function run(name: string, fn: () => void | Promise<void>): Promise<void> {
   try {
